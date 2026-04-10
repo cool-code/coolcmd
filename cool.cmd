@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ==========================================
-echo    CoolCMD One-Key Installer
+echo    CoolCMD Loader - One-Key Setup
 echo ==========================================
 
 :: 1. Install Tools
@@ -61,11 +61,11 @@ if "!CLINK_INSTALLED!"=="0" (
     call clink autorun install -- -q 2>nul
 )
 
-echo ==========================================
-echo    Installation successful!
-echo    [Note] Please manually select the "MesloLGM NF" font in Windows Terminal settings,
-echo    otherwise icons may appear garbled.
-echo ==========================================
+echo ========================================
+echo DONE! Type 'cool' to reload (if needed).
+echo ========================================
+echo.
+echo [Note] Please manually select the "MesloLGM NF" font in Windows Terminal settings for proper icon display.
 pause
 
 echo [*] Cleaning up...
