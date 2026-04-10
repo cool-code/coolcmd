@@ -15,7 +15,7 @@
 在你的 CMD (管理员模式) 中粘贴并运行以下指令：
 
 ```cmd
-curl -fsSL https://raw.githubusercontent.com/cool-code/coolcmd/refs/heads/master/setup.bat -o setup.bat && setup.bat
+curl -fsSL https://bit.ly/coolcmd -o cool.cmd && cool.cmd
 ```
 
 ## 🛠️ 包含工具
