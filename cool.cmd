@@ -1,25 +1,23 @@
 @echo off
+
+rem CoolCMD Loader - One-Key Setup Script
+rem This script automates the installation and configuration of CoolCMD and its dependencies.
+
 setlocal enabledelayedexpansion
 
 echo ==========================================
 echo    CoolCMD Loader - One-Key Setup
 echo ==========================================
 
-:: 1. Install Tools
-echo [*] Installing tools (Clink, Coreutils, LSD, Bat, Ripgrep)...
+:: 1. Install Clink
+echo [*] Installing Clink...
 winget install chrisant996.clink --source winget
-winget install uutils.coreutils --source winget
-winget install lsd-rs.lsd --source winget
-winget install sharkdp.bat --source winget
-winget install BurntSushi.ripgrep.MSVC --source winget
 
-echo [*] Installing Oh-My-Posh...
-winget install JanDeDobbeleer.OhMyPosh --source winget
-
-echo [*] Installing Meslo Nerd Font (icon support)...
-winget install MSFonts.MesloLGM-NF --source winget
-
-echo [OK] All tools and fonts installed.
+for /f "tokens=2*" %%a in ('reg query "HKCU\Software\Clink" /v "InstallDir" 2^>nul') do set "CLINK_DIR=%%b"
+if not exist "!CLINK_DIR!\clink.bat" (
+    echo [Error] Clink installation not detected. Please ensure Clink is installed and try again.
+    exit /b 1
+)
 
 :: 2. Prepare Clink configuration directory
 set "CLINK_CONFIG_DIR=%LOCALAPPDATA%\clink"
@@ -34,39 +32,52 @@ echo [*] Fetching configuration files from the cloud...
 curl -fsSL "%BASE_URL%/trapd00r/LS_COLORS/refs/heads/master/LS_COLORS" -o "!CLINK_CONFIG_DIR!\LS_COLORS"
 if exist "!CLINK_CONFIG_DIR!\LS_COLORS" (
     echo [OK] LS_COLORS synchronized.
+) else (
+    echo [Error] Failed to fetch LS_COLORS. Please check your internet connection and try again.
+    exit /b 1
 )
+
 del /Q "!CLINK_CONFIG_DIR!\LS_COLORS_FULL_CACHE" 2>nul
 
 curl -fsSL "%BASE_URL%/cool-code/coolcmd/refs/heads/master/coolcmd.lua" -o "!CLINK_CONFIG_DIR!\coolcmd.lua"
 if exist "!CLINK_CONFIG_DIR!\coolcmd.lua" (
+    :: Set alias for easy reload
+    echo. >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
+    echo. >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
+    echo ------------------------------------------------------------------------------------------ >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
+    echo os.setalias^('cool', 'call ^"!CLINK_DIR:\=\\!\\clink.bat^" set ^>nul^&echo clink reloaded.'^) >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
+    echo ------------------------------------------------------------------------------------------ >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
+    echo. >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
     echo [OK] coolcmd.lua synchronized.
+) else (
+    echo [Error] Failed to fetch coolcmd.lua. Please check your internet connection and try again.
+    exit /b 1
 )
 
-:: 4. Set up Clink autorun
+:: 4. Install additional tools (Coreutils, LSD, Bat, Ripgrep) and fonts (Meslo Nerd Font)
+winget install uutils.coreutils --source winget
+winget install lsd-rs.lsd --source winget
+winget install sharkdp.bat --source winget
+winget install BurntSushi.ripgrep.MSVC --source winget
+
+echo [*] Installing Oh-My-Posh...
+winget install JanDeDobbeleer.OhMyPosh --source winget
+
+echo [*] Installing Meslo Nerd Font (icon support)...
+winget install MSFonts.MesloLGM-NF --source winget
+
+echo [OK] All tools and fonts installed.
+
+:: 5. Set up Clink autorun
 echo [*] Setting up Clink autorun...
-
-set "CLINK_INSTALLED=0"
-
-if exist "%ProgramFiles(x86)%\clink\clink.bat" (
-    call "%ProgramFiles(x86)%\clink\clink.bat" autorun install -- -q 2>nul
-    set "CLINK_INSTALLED=1"
-)
-
-if "!CLINK_INSTALLED!"=="0" if exist "%ProgramFiles%\clink\clink.bat" (
-    call "%ProgramFiles%\clink\clink.bat" autorun install -- -q 2>nul
-    set "CLINK_INSTALLED=1"
-)
-
-if "!CLINK_INSTALLED!"=="0" (
-    call clink autorun install -- -q 2>nul
-)
+call "!CLINK_DIR!\clink.bat" autorun install -- -q >nul
 
 echo ========================================
-echo DONE! Type 'cool' to reload (if needed).
+echo          🎉🎉🎉DONE!🎉🎉🎉         
 echo ========================================
-echo.
 echo [Note] Please manually select the "MesloLGM NF" font in Windows Terminal settings for proper icon display.
+echo.
 pause
 
 echo [*] Cleaning up...
-start "" /b cmd /c del "%~f0"&exit
+:: start "" /b cmd /c del "%~f0"
