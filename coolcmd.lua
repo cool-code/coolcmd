@@ -99,6 +99,9 @@ os.setalias('cat', 'bat --paging=never --style=plain $*')
 -- 4. 其他常用 Linux 映射
 os.setalias('df', 'df -h $*')     -- 以易读的格式显示磁盘空间
 os.setalias('du', 'du -h -d1 $*') -- 显示当前目录下各文件夹大小
+os.setalias('which', 'where $*') -- 查找可执行文件位置
+os.setalias('top', 'btop $*')   -- 系统资源监视器
+os.setalias('clear', 'cls')     -- 清屏
 
 os.setalias('..', 'cd ..')
 os.setalias('...', 'cd ../..')
