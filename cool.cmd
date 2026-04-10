@@ -42,25 +42,36 @@ del /Q "!CLINK_CONFIG_DIR!\LS_COLORS_FULL_CACHE" 2>nul
 curl -fsSL "%BASE_URL%/cool-code/coolcmd/refs/heads/master/coolcmd.lua" -o "!CLINK_CONFIG_DIR!\coolcmd.lua"
 if exist "!CLINK_CONFIG_DIR!\coolcmd.lua" (
     :: Set alias for easy reload
-    echo. >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
-    echo. >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
+    echo= >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
+    echo= >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
     echo ------------------------------------------------------------------------------------------ >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
     echo os.setalias^('cool', 'call ^"!CLINK_DIR:\=\\!\\clink.bat^" set ^>nul^&echo clink reloaded.'^) >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
     echo ------------------------------------------------------------------------------------------ >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
-    echo. >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
+    echo= >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
     echo [OK] coolcmd.lua synchronized.
 ) else (
     echo [Error] Failed to fetch coolcmd.lua. Please check your internet connection and try again.
     exit /b 1
 )
 
-:: 4. Install additional tools (Coreutils, LSD, Bat, Ripgrep) and fonts (Meslo Nerd Font)
+:: 4. Install additional tools (Coreutils, LSD, Bat, Ripgrep, btop, Oh-My-Posh) and fonts (Meslo Nerd Font)
+
+echo [*] Installing uutils coreutils...
 winget install uutils.coreutils --source winget
+
+echo [*] Installing LSD (Enhanced ls)...
 winget install lsd-rs.lsd --source winget
+
+echo [*] Installing Bat (Enhanced Cat)...
 winget install sharkdp.bat --source winget
+
+echo [*] Installing Ripgrep (Search Tool)...
 winget install BurntSushi.ripgrep.MSVC --source winget
 
-echo [*] Installing Oh-My-Posh...
+echo [*] Installing btop (System Monitor)...
+winget install aristocratos.btop --source winget
+
+echo [*] Installing Oh-My-Posh (Prompt Theme Engine)...
 winget install JanDeDobbeleer.OhMyPosh --source winget
 
 echo [*] Installing Meslo Nerd Font (icon support)...
@@ -76,7 +87,7 @@ echo ========================================
 echo          🎉🎉🎉DONE!🎉🎉🎉         
 echo ========================================
 echo [Note] Please manually select the "MesloLGM NF" font in Windows Terminal settings for proper icon display.
-echo.
+echo=
 pause
 
 echo [*] Cleaning up...
