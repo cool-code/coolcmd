@@ -1,7 +1,6 @@
 @echo off
-
-rem CoolCMD Loader - One-Key Setup Script
-rem This script automates the installation and configuration of CoolCMD and its dependencies.
+:: CoolCMD Loader - One-Key Setup Script
+:: This script automates the installation of Clink and related tools, and sets up the configuration.
 
 setlocal enabledelayedexpansion
 
@@ -54,7 +53,7 @@ if exist "!CLINK_CONFIG_DIR!\coolcmd.lua" (
     exit /b 1
 )
 
-:: 4. Install additional tools (Coreutils, LSD, Bat, Ripgrep, btop, Oh-My-Posh) and fonts (Meslo Nerd Font)
+:: 4. Install additional tools (Coreutils, LSD, Bat, Ripgrep, btop, Procs, Oh-My-Posh) and fonts (Meslo Nerd Font)
 
 echo [*] Installing uutils coreutils...
 winget install uutils.coreutils --source winget
@@ -69,13 +68,16 @@ echo [*] Installing Ripgrep (Search Tool)...
 winget install BurntSushi.ripgrep.MSVC --source winget
 
 echo [*] Installing btop (System Monitor)...
-winget install aristocratos.btop --source winget
+winget install aristocratos.btop4win --source winget
+
+echo [*] Installing Procs (Enhanced Task Manager)...
+winget install dalance.procs --source winget
 
 echo [*] Installing Oh-My-Posh (Prompt Theme Engine)...
 winget install JanDeDobbeleer.OhMyPosh --source winget
 
 echo [*] Installing Meslo Nerd Font (icon support)...
-winget install MSFonts.MesloLGM-NF --source winget
+oh-my-posh font install meslo
 
 echo [OK] All tools and fonts installed.
 
@@ -83,12 +85,12 @@ echo [OK] All tools and fonts installed.
 echo [*] Setting up Clink autorun...
 call "!CLINK_DIR!\clink.bat" autorun install -- -q >nul
 
-echo ========================================
-echo          🎉🎉🎉DONE!🎉🎉🎉         
-echo ========================================
-echo [Note] Please manually select the "MesloLGM NF" font in Windows Terminal settings for proper icon display.
+echo ==========================================
+echo  DONE! Type 'cool' to reload (if needed).
+echo ==========================================
+echo [Note] Please manually select the "MesloLGM Nerd Font" font in Windows Terminal settings for proper icon display.
 echo=
 pause
 
 echo [*] Cleaning up...
-:: start "" /b cmd /c del "%~f0"
+start "" /b cmd /c del "%~f0"

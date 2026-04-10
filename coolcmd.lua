@@ -3,7 +3,6 @@
 -- 7000: 最安全，cmd 的 echo %LS_COLORS% 还能勉强工作
 -- 8191: CMD 命令行参数的理论极限
 -- 32767: Windows 进程环境变量的理论极限（lsd 能读到，但 echo 会崩溃）
-
 -- 用户可以随时修改这个值，重启 CMD 立即生效
 local LS_COLORS_MAX_LENGTH = 7000 
 -- =================================================
@@ -80,28 +79,42 @@ end
 
 ------------------------------------------------------------------------------------------
 
--- 1. 核心文件查看 (lsd)
+-- 核心文件查看 (lsd)
 os.setalias('ls', 'lsd --color always --icon always $*')
 os.setalias('ll', 'lsd -l --color always --icon always $*')
 os.setalias('la', 'lsd -A --color always --icon always $*')
 os.setalias('lt', 'lsd --tree --color always --icon always $*')
 
--- 2. 安全删除与移动 (uutils coreutils)
+-- 安全删除与移动 (uutils coreutils)
 -- -i 会在操作前请求确认，-v 会显示过程
 os.setalias('rm', 'rm -iv $*')
 os.setalias('cp', 'cp -iv $*')
 os.setalias('mv', 'mv -iv $*')
 
--- 3. 增强搜索与查看
+-- 增强搜索与查看
 os.setalias('grep', 'rg $*')
 os.setalias('cat', 'bat --paging=never --style=plain $*')
 
--- 4. 其他常用 Linux 映射
+-- 进程管理
+os.setalias('ps', 'procs --color always --paper disable $*')  -- 进程列表查看器
+os.setalias('top', 'btop $*')  -- 系统资源监视器
+
+-- kill系列，忽略 -9 等 Unix 讯号，强制按 PID 杀进程
+-- 内部直接使用 set _P_= 来实现 unset 的功能
+os.setalias('kill', '@echo off $T set "_P_=" $T for %A in ($*) do set "_P_=%A" $T if defined _P_ taskkill /f /pid %_P_% $T set "_P_=" $T echo on')
+
+-- killall: 按完整名称杀进程
+os.setalias('killall', '@echo off $T set "_N_=" $T for %A in ($*) do set "_N_=%A" $T if defined _N_ taskkill /f /im %_N_% $T set "_N_=" $T echo on')
+
+-- pkill: 按部分名称加通配符杀进程
+os.setalias('pkill', '@echo off $T set "_N_=" $T for %A in ($*) do set "_N_=%A" $T if defined _N_ taskkill /f /im %_N_%* $T set "_N_=" $T echo on')
+
+-- 其他常用 Linux 映射
 os.setalias('df', 'df -h $*')     -- 以易读的格式显示磁盘空间
 os.setalias('du', 'du -h -d1 $*') -- 显示当前目录下各文件夹大小
 os.setalias('which', 'where $*') -- 查找可执行文件位置
-os.setalias('top', 'btop $*')   -- 系统资源监视器
 os.setalias('clear', 'cls')     -- 清屏
+os.setalias('unset', 'set $*=') -- 取消环境变量设置
 
 os.setalias('..', 'cd ..')
 os.setalias('...', 'cd ../..')
@@ -111,7 +124,7 @@ os.setalias('......', 'cd ../../../../..')
 os.setalias('.......', 'cd ../../../../../..')
 os.setalias('........', 'cd ../../../../../../..')
 
--- 5. Oh My Posh 初始化
+-- Oh My Posh 初始化
 local omp_cmd = 'oh-my-posh init cmd --config jandedobbeleer'
 local status, handle = pcall(io.popen, omp_cmd)
 if status and handle then
