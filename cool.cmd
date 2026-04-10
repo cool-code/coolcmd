@@ -12,8 +12,24 @@ echo ==========================================
 echo [*] Installing Clink...
 winget install chrisant996.clink --source winget
 
-for /f "tokens=2*" %%a in ('reg query "HKCU\Software\Clink" /v "InstallDir" 2^>nul') do set "CLINK_DIR=%%b"
-if not exist "!CLINK_DIR!\clink.bat" (
+set "CLINK_INSTALLED=0"
+
+for /f "tokens=2*" %%a in ('reg query "HKCU\Software\Clink" /v "InstallDir" 2^>nul') do set "CLINK_BAT=%%b\clink.bat"
+if exist "!CLINK_BAT!" (
+    set "CLINK_INSTALLED=1"
+)
+
+if "!CLINK_INSTALLED!"=="0" if exist "%ProgramFiles(x86)%\clink\clink.bat" (
+    set "CLINK_BAT=%ProgramFiles(x86)%\clink\clink.bat"
+    set "CLINK_INSTALLED=1"
+)
+
+if "!CLINK_INSTALLED!"=="0" if exist "%ProgramFiles%\clink\clink.bat" (
+    set "CLINK_BAT=%ProgramFiles%\clink\clink.bat"
+    set "CLINK_INSTALLED=1"
+)
+
+if "!CLINK_INSTALLED!"=="0" (
     echo [Error] Clink installation not detected. Please ensure Clink is installed and try again.
     exit /b 1
 )
@@ -44,7 +60,7 @@ if exist "!CLINK_CONFIG_DIR!\coolcmd.lua" (
     echo= >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
     echo= >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
     echo ------------------------------------------------------------------------------------------ >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
-    echo os.setalias^('cool', 'call ^"!CLINK_DIR:\=\\!\\clink.bat^" set ^>nul^&echo clink reloaded.'^) >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
+    echo os.setalias^('cool', 'call ^"!CLINK_BAT:\=\\!^" set ^>nul^&echo clink reloaded.'^) >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
     echo ------------------------------------------------------------------------------------------ >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
     echo= >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
     echo [OK] coolcmd.lua synchronized.
@@ -83,7 +99,7 @@ echo [OK] All tools and fonts installed.
 
 :: 5. Set up Clink autorun
 echo [*] Setting up Clink autorun...
-call "!CLINK_DIR!\clink.bat" autorun install -- -q >nul
+call "!CLINK_BAT!" autorun install -- -q >nul
 
 echo ==========================================
 echo  DONE! Type 'cool' to reload (if needed).
