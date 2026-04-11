@@ -8,6 +8,17 @@ echo ==========================================
 echo    CoolCMD Loader - One-Key Setup
 echo ==========================================
 
+:: 0. Check for Winget
+where winget >nul 2>nul
+if !errorlevel! neq 0 (
+    echo [*] Winget not found. Attempting to install...
+    powershell -NoProfile -Nologo -ExecutionPolicy Bypass -Command "irm asheroto.com/winget | iex"
+    if !errorlevel! neq 0 (
+        echo [Error] Failed to install Winget. Please install it manually.
+        exit /b 1
+    )
+)
+
 :: 1. Install Clink
 echo [*] Installing Clink...
 winget install chrisant996.clink --source winget
