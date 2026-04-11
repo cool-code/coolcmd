@@ -79,25 +79,152 @@ end
 
 ------------------------------------------------------------------------------------------
 
--- 核心文件查看 (lsd)
-os.setalias('ls', 'lsd --color always --icon always $*')
-os.setalias('ll', 'lsd -l --color always --icon always $*')
-os.setalias('la', 'lsd -A --color always --icon always $*')
-os.setalias('lt', 'lsd --tree --color always --icon always $*')
+-- 以下是一些常用 Linux 命令的 Windows 映射，前提是用户已经安装了对应的工具（如 lsd、rg、bat、procs、btop 等）
+local function command_exists(cmd)
+    local f = io.popen("where " .. cmd .. " 2>nul")
+    if f then
+        local res = f:read("*a")
+        f:close()
+        return res ~= nil and res:match("%S") ~= nil
+    end
+    return false
+end
+
+lsdexists = command_exists("lsd")
+lsexists = command_exists("ls")
+
+-- 核心文件查看命令，优先使用 lsd，如果没有则退回到 ls，最后退回到原生 dir
+local lsd_base = 'lsd --color auto --icon always --group-directories-first'
+local ls_base = 'ls --color=auto --group-directories-first'
+local dir_base = 'dir /OG'
+
+if lsdexists then
+    os.setalias('l',   lsd_base .. ' $*')
+    os.setalias('ls',  lsd_base .. ' $*') 
+    os.setalias('ll',  lsd_base .. ' -lh $*') -- 正确显示 Windows 大小单位（KB, MB, GB）
+    os.setalias('la',  lsd_base .. ' -A $*')
+    os.setalias('lla', lsd_base .. ' -lhA $*')
+    os.setalias('l1',  lsd_base .. ' -1 $*')
+    os.setalias('l1a', lsd_base .. ' -1A $*')
+    os.setalias('lt',  lsd_base .. ' --tree $*')
+elseif lsexists then
+    os.setalias('l',   ls_base .. ' $*')
+    os.setalias('ls',  ls_base .. ' $*')
+    os.setalias('ll',  ls_base .. ' -lh $*') -- ls 的 -h 选项在 Windows 上也能正确显示大小单位
+    os.setalias('la',  ls_base .. ' -A $*')
+    os.setalias('lla', ls_base .. ' -lhA $*')
+    os.setalias('l1',  ls_base .. ' -1 $*')
+    os.setalias('l1a', ls_base .. ' -1A $*')
+    os.setalias('lt',  'tree /F $*')
+else
+    -- 最后退回到原生 dir，尽量模仿 Unix 风格的输出
+    os.setalias('l',   dir_base .. ' /D $*')
+    os.setalias('ls',  dir_base .. ' /D $*')
+    os.setalias('ll',  dir_base .. ' /Q $*')
+    os.setalias('la',  dir_base .. ' /D /A $*')
+    os.setalias('lla', dir_base .. ' /Q /A $*')
+    os.setalias('l1',  dir_base .. ' /B $*')
+    os.setalias('l1a', dir_base .. ' /B /A $*')
+    os.setalias('lt',  'tree /F $*')
+end
+
+local function set_smart_ld_alias(name, ls_args, dir_args)
+    if lsdexists or lsexists then
+        local base = (lsdexists and lsd_base or ls_base) .. " " .. ls_args
+        -- 逻辑：
+        -- 1. A 承接原始参数
+        -- 2. 如果 A 为空，补 */
+        -- 3. 如果不为空，根据末尾字元 L \ L2 \ L3 进行修补
+        -- 4. 统一执行 base %A%
+        os.setalias(name, [[@echo off $T set "A=$*" $T ]]..
+            [[set "L=%A:~-1%" $T set "L2=%A:~-2%" $T set "L3=%A:~-3%" $T ]]..
+            [[if not defined A ( set "A=*/" ) ]]..
+            [[else if not "%L3%"=="/*/" if not "%L3%"=="\*/" if not "%L3%"=="\*\" if not "%L3%"=="*\" if not "%L3%"=="*/" if "%L2%"=="*" ( set "A=%A%/" ) ]]..
+            [[else if "%L2%"=="/*" ( set "A=%A%/" ) ]]..
+            [[else if "%L2%"=="\*" ( set "A=%A%/" ) ]]..
+            [[else if not "%L2%"=="*/" if not "%L2%"=="*\" if not "%L%"=="*" if "%L%"=="/" ( set "A=%A%*/" ) ]]..
+            [[else if "%L%"=="\" ( set "A=%A%*/" ) ]]..
+            [[else ( set "A=%A%/*/" ) $T ]]..
+            base..[[ %A% $T set "A=" $T set "L=" $T set "L2=" $T set "L3=" $T echo on]])            
+    else
+        -- dir 模式重构：统一处理 A 后执行
+        os.setalias(name, [[@echo off $T set "A=$*" $T if not defined A (set "A= ") else (]]..
+            [[set "E=%A:~-2%" $T if "%E%"=="*\" set "A=%A:~0,-1%") $T ]]..
+            dir_base.." "..dir_args..[[ %A% $T set "A=" $T set "E=" $T echo on]])
+    end
+end
+
+-- ld 系列，显示目录但不显示文件
+set_smart_ld_alias('ld',   '-d', '/D /A:D-H-S')
+set_smart_ld_alias('lld',  '-ld', '/Q /A:D-H-S')
+set_smart_ld_alias('lad',  '-ad', '/D /A:D')
+set_smart_ld_alias('llad', '-lad', '/Q /A:D')
+set_smart_ld_alias('l1d',  '-1d', '/B /A:D-H-S')
+set_smart_ld_alias('l1ad', '-1ad', '/B /A:D')
+
+-- lf 系列，显示文件但不显示目录
+-- 只 dir 实现，因为 ls 和 lsd 都没有直接的选项来过滤掉目录
+-- 如果依赖 grep，反而会更慢（尤其是大目录），不如直接用 dir 的过滤功能
+os.setalias('lf',   dir_base .. ' /D /A:-D-H-S $*')
+os.setalias('llf',  dir_base .. ' /Q /A:-D-H-S $*')
+os.setalias('laf',  dir_base .. ' /D /A:-D $*')     -- 只看文件（包含隐藏）
+os.setalias('llaf', dir_base .. ' /Q /A:-D $*')
+os.setalias('l1f',  dir_base .. ' /B /A:-D-H-S $*')
+os.setalias('l1af', dir_base .. ' /B /A:-D $*')
 
 -- 安全删除与移动 (uutils coreutils)
 -- -i 会在操作前请求确认，-v 会显示过程
-os.setalias('rm', 'rm -iv $*')
-os.setalias('cp', 'cp -iv $*')
-os.setalias('mv', 'mv -iv $*')
+if command_exists("rm") then
+    os.setalias('rm', 'rm -iv $*')
+else
+    os.setalias('rm', 'del /p $*')
+end
+
+if command_exists("mv") then
+    os.setalias('mv', 'mv -iv $*')
+else
+    os.setalias('mv', 'move $*')
+end
+
+if command_exists("cp") then
+    os.setalias('cp', 'cp -iv $*')
+else
+    os.setalias('cp', 'copy $*')
+end
 
 -- 增强搜索与查看
-os.setalias('grep', 'rg $*')
-os.setalias('cat', 'bat --paging=never --style=plain $*')
+if command_exists("rg") then
+    os.setalias('grep', 'rg $*')
+elseif command_exists("grep") then
+    os.setalias('grep', 'grep --color=auto $*')
+else 
+    os.setalias('grep', 'findstr /R $*')
+end
+
+if command_exists("bat") then
+    os.setalias('cat', 'bat --paging=never --style=plain $*')
+elseif not command_exists("cat") then
+    os.setalias('cat', 'type $*')
+end
 
 -- 进程管理
-os.setalias('ps', 'procs --color always --paper disable $*')  -- 进程列表查看器
-os.setalias('top', 'btop $*')  -- 系统资源监视器
+if command_exists("btop") then
+    os.setalias('top', 'btop $*')
+elseif command_exists("btop4win") then
+    os.setalias('btop', 'btop4win $*')
+    os.setalias('top', 'btop4win $*')
+elseif command_exists("htop") then
+    os.setalias('top', 'htop $*')
+else
+    os.setalias('top', 'resmon $*')
+end
+
+procsexists = command_exists("procs")
+if command_exists("procs") then
+    os.setalias('ps', 'procs --color always --paper disable $*')  -- 进程列表查看器
+else
+    os.setalias('ps', 'tasklist /v $*')
+end
 
 -- kill系列，忽略 -9 等 Unix 讯号，强制按 PID 杀进程
 -- 内部直接使用 set _P_= 来实现 unset 的功能
@@ -115,6 +242,8 @@ os.setalias('du', 'du -h -d1 $*') -- 显示当前目录下各文件夹大小
 os.setalias('which', 'where $*') -- 查找可执行文件位置
 os.setalias('clear', 'cls')     -- 清屏
 os.setalias('unset', 'set $*=') -- 取消环境变量设置
+
+os.setalias('free', 'powershell -NoLogo -NoProfile -command "Get-WmiObject Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, FreePhysicalMemory"')
 
 os.setalias('..', 'cd ..')
 os.setalias('...', 'cd ../..')
