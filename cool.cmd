@@ -63,7 +63,9 @@ if exist "!CLINK_CONFIG_DIR!\LS_COLORS" (
     exit /b 1
 )
 
-del /Q "!CLINK_CONFIG_DIR!\LS_COLORS_FULL_CACHE" 2>nul
+:: Clear old cache files
+if exist "!CLINK_CONFIG_DIR!\LS_COLORS_FULL_CACHE" del /Q "!CLINK_CONFIG_DIR!\LS_COLORS_FULL_CACHE"
+if exist "!CLINK_CONFIG_DIR!\COOL_TOOLS_CACHE.lua" del /Q "!CLINK_CONFIG_DIR!\COOL_TOOLS_CACHE.lua"
 
 curl -fsSL "%BASE_URL%/cool-code/coolcmd/refs/heads/master/coolcmd.lua" -o "!CLINK_CONFIG_DIR!\coolcmd.lua"
 if exist "!CLINK_CONFIG_DIR!\coolcmd.lua" (
