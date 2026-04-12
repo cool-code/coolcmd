@@ -25,11 +25,6 @@ winget install chrisant996.clink --source winget
 
 set "CLINK_INSTALLED=0"
 
-for /f "tokens=2*" %%a in ('reg query "HKCU\Software\Clink" /v "InstallDir" 2^>nul') do set "CLINK_BAT=%%b\clink.bat"
-if exist "!CLINK_BAT!" (
-    set "CLINK_INSTALLED=1"
-)
-
 if "!CLINK_INSTALLED!"=="0" if exist "%ProgramFiles(x86)%\clink\clink.bat" (
     set "CLINK_BAT=%ProgramFiles(x86)%\clink\clink.bat"
     set "CLINK_INSTALLED=1"
@@ -63,26 +58,19 @@ if exist "!CLINK_CONFIG_DIR!\LS_COLORS" (
     exit /b 1
 )
 
-:: Clear old cache files
-if exist "!CLINK_CONFIG_DIR!\LS_COLORS_FULL_CACHE" del /Q "!CLINK_CONFIG_DIR!\LS_COLORS_FULL_CACHE"
-if exist "!CLINK_CONFIG_DIR!\COOL_TOOLS_CACHE.lua" del /Q "!CLINK_CONFIG_DIR!\COOL_TOOLS_CACHE.lua"
-
 curl -fsSL "%BASE_URL%/cool-code/coolcmd/refs/heads/master/coolcmd.lua" -o "!CLINK_CONFIG_DIR!\coolcmd.lua"
 if exist "!CLINK_CONFIG_DIR!\coolcmd.lua" (
-    :: Set alias for easy reload
-    echo= >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
-    echo= >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
-    echo ------------------------------------------------------------------------------------------ >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
-    echo os.setalias^('cool', 'call ^"!CLINK_BAT:\=\\!^" set ^>nul^&echo clink reloaded.'^) >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
-    echo ------------------------------------------------------------------------------------------ >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
-    echo= >> "!CLINK_CONFIG_DIR!\coolcmd.lua"
     echo [OK] coolcmd.lua synchronized.
 ) else (
     echo [Error] Failed to fetch coolcmd.lua. Please check your internet connection and try again.
     exit /b 1
 )
 
-:: 4. Install additional tools (Coreutils, LSD, Bat, Ripgrep, btop, Procs, Oh-My-Posh) and fonts (Meslo Nerd Font)
+:: 4. Clear old cache files
+if exist "!CLINK_CONFIG_DIR!\LS_COLORS_FULL_CACHE" del /Q "!CLINK_CONFIG_DIR!\LS_COLORS_FULL_CACHE"
+if exist "!CLINK_CONFIG_DIR!\COOL_TOOLS_CACHE.lua" del /Q "!CLINK_CONFIG_DIR!\COOL_TOOLS_CACHE.lua"
+
+:: 5. Install additional tools (Coreutils, LSD, Bat, Ripgrep, btop, Procs, Oh-My-Posh) and fonts (Meslo Nerd Font)
 
 echo [*] Installing uutils coreutils...
 winget install uutils.coreutils --source winget
@@ -110,7 +98,7 @@ oh-my-posh font install meslo
 
 echo [OK] All tools and fonts installed.
 
-:: 5. Set up Clink autorun
+:: 6. Set up Clink autorun quietly
 echo [*] Setting up Clink autorun...
 call "!CLINK_BAT!" autorun install -- -q >nul
 

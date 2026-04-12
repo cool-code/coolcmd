@@ -1,13 +1,46 @@
--- ================= CONFIGURATION =================
--- 设置 LS_COLORS 的字符长度上限
--- 7000: 最安全，cmd 的 echo %LS_COLORS% 还能勉强工作
--- 8191: CMD 命令行参数的理论极限
--- 32767: Windows 进程环境变量的理论极限（lsd 能读到，但 echo 会崩溃）
--- 用户可以随时修改这个值，重启 CMD 立即生效
-local LS_COLORS_MAX_LENGTH = 30000
--- =================================================
+-- ============================ CLINK_PATH ====================================
 
 local clink_path = os.getenv("LOCALAPPDATA") .. "\\clink\\"
+
+-- =================== LANGUAGE DETECTION & CACHE =============================
+-- Windows 上的语言环境设置比较麻烦，尤其是对于那些依赖 LANG 环境变量来判断输出
+-- 编码的工具（如 lsd、rg、bat 等）。这个模块的目的是在第一次运行时侦测系统语言
+-- 环境，并将结果缓存到文件中，后续直接加载缓存以避免重复侦测带来的性能问题。
+-- 如果需要更改为其他语言环境，可以直接编辑生成的 LANG_ENV.lua 文件，修改其中的
+-- LANG 设置即可。
+local lang_env_file = clink_path .. "LANG_ENV.lua"
+
+-- 侦测逻辑（只在第一次运行）
+if not os.isfile(lang_env_file) then
+    local handle = io.popen("powershell -NoProfile -Command \"(Get-Culture).Name\"")
+    local res = handle:read("*a")
+    handle:close()
+    local lang_val = (res and res ~= "") and (res:gsub("%s+", ""):gsub("-", "_") .. ".UTF-8") or "en_US.UTF-8"
+
+    local f_save = io.open(lang_env_file, "w")
+    if f_save then
+        f_save:write('os.setenv("LANG", "' .. lang_val .. '")\n')
+        f_save:close()
+        -- 第一次生成后，为了让当前会话生效，执行一次
+        os.setenv("LANG", lang_val)
+    end
+end
+
+-- ====================== LS_COLORS CONFIGURATION =============================
+-- 设置 LS_COLORS 的字符长度上限
+-- 8191: CMD 命令行参数的理论极限，cmd 的 echo %LS_COLORS% 还能勉强工作。
+-- 32767: Windows 进程环境变量的理论极限（lsd 能读到，但 echo 会崩溃）。
+-- 用户可以随时修改这个值，重启 CMD 立即生效。
+-- 注意：
+--      这个值只是一个动态截断点，真正存储在缓存中的 LS_COLORS 值是完整的，用
+--      户可以通过修改这个值来调整实际使用的长度。目前设置的 16383 实际上大于
+--      LS_COLORS 的缓存长度，目的是为了保证现在和将来默认都尽量不截断，尽量多
+--      地保留颜色配置让大部分工具（包括 lsd, rg）能正常工作，同时给其它环境变
+--      量留够空间。但缺点是用 echo %LS_COLORS% 来查看时看不到内容。如果用户需
+--      要在 echo 或 set 中看到这个环境变量的值，请将它设置为 8191 或更小。
+local LS_COLORS_MAX_LENGTH = 16383
+-- ============================================================================
+
 local raw_file = clink_path .. "LS_COLORS"
 local cache_file = clink_path .. "LS_COLORS_FULL_CACHE" -- 缓存完整解析结果
 
@@ -91,15 +124,12 @@ if full_str and full_str ~= "" then
     os.setenv("LS_COLORS", final_str)
 end
 
--- ================= TOOL DETECTION WITH CACHE =================
-
+-- ====================== TOOL DETECTION WITH CACHE ===========================
 local tool_cache_file = clink_path .. "COOL_TOOLS_CACHE.lua"
 local _TOOLS = {}
 
 -- 1. 尝试加载缓存
-local f_cache = io.open(tool_cache_file, "r")
-if f_cache then
-    f_cache:close()
+if os.isfile(tool_cache_file) then
     _TOOLS = dofile(tool_cache_file) -- 这会直接填充 _TOOLS 表
 else
     -- 2. 缓存不存在，执行一次性批量侦测 (慢速，仅执行一次)
@@ -135,36 +165,30 @@ end
 local function command_exists(cmd)
     return _TOOLS[cmd] == true
 end
+-- ============================================================================
 
--- ==============================================================
-
--- 以下是一些常用 Linux 命令的 Windows 映射，前提是用户已经安装了对应的工具（如 lsd、rg、bat、procs、btop 等）
+-- 以下是一些常用 Linux 命令的 Windows 映射。
+-- 如果用户已经安装了对应的工具（如 lsd、rg、bat、procs、btop 等），则优先使用
+-- 它们来提供更接近 Linux 的使用体验；如果没有安装，则退回到 Windows 原生命令
+--（如 dir、tasklist、resmon 等），并尽量调整参数以模仿 Linux 的输出格式。
 local lsd_exists = command_exists("lsd")
 local ls_exists = command_exists("ls")
 
--- 核心文件查看命令，优先使用 lsd，如果没有则退回到 ls，最后退回到原生 dir
+-- 文件查看命令，优先使用 lsd，如果没有则退回到 ls，最后退回到原生 dir
 local lsd_base = 'lsd --color auto --icon always --group-directories-first'
 local ls_base = 'ls --color=auto --group-directories-first'
 local dir_base = 'dir /OG'
 
-if lsd_exists then
-    os.setalias('l', lsd_base .. ' $*')
-    os.setalias('ls', lsd_base .. ' $*')
-    os.setalias('ll', lsd_base .. ' -lh $*') -- 正确显示 Windows 大小单位（KB, MB, GB）
-    os.setalias('la', lsd_base .. ' -A $*')
-    os.setalias('lla', lsd_base .. ' -lhA $*')
-    os.setalias('l1', lsd_base .. ' -1 $*')
-    os.setalias('l1a', lsd_base .. ' -1A $*')
-    os.setalias('lt', lsd_base .. ' --tree $*')
-elseif ls_exists then
-    os.setalias('l', ls_base .. ' $*')
-    os.setalias('ls', ls_base .. ' $*')
-    os.setalias('ll', ls_base .. ' -lh $*') -- ls 的 -h 选项在 Windows 上也能正确显示大小单位
-    os.setalias('la', ls_base .. ' -A $*')
-    os.setalias('lla', ls_base .. ' -lhA $*')
-    os.setalias('l1', ls_base .. ' -1 $*')
-    os.setalias('l1a', ls_base .. ' -1A $*')
-    os.setalias('lt', 'tree /F $*')
+if lsd_exists or ls_exists then
+    local base = (lsd_exists and lsd_base or ls_base)
+    -- -h 参数显示人类可读的文件大小，-A 显示隐藏文件，-1 列表显示（每行一个）
+    os.setalias('l', base .. ' $*')
+    os.setalias('ls', base .. ' $*')
+    os.setalias('ll', base .. ' -lh $*')
+    os.setalias('la', base .. ' -A $*')
+    os.setalias('lla', base .. ' -lhA $*')
+    os.setalias('l1', base .. ' -1 $*')
+    os.setalias('l1a', base .. ' -1A $*')
 else
     -- 最后退回到原生 dir，尽量模仿 Unix 风格的输出
     os.setalias('l', dir_base .. ' /D $*')
@@ -174,9 +198,19 @@ else
     os.setalias('lla', dir_base .. ' /Q /A $*')
     os.setalias('l1', dir_base .. ' /B $*')
     os.setalias('l1a', dir_base .. ' /B /A $*')
+end
+
+if lsd_exists then
+    os.setalias('lt', lsd_base .. ' --tree $*')
+else
     os.setalias('lt', 'tree /F $*')
 end
 
+-- ld 系列命令的目标是只显示目录，不显示文件。
+-- ls 和 lsd 都没有直接的选项来实现这个功能。
+-- 解决方案是创建一个智能别名，先处理用户输入的路径参数，动态地在末尾添加通配符
+-- 和过滤选项，然后再调用 ls/lsd 或 dir 来执行。这个智能别名会根据用户输入路径
+-- 参数自动调整，确保无论用户输入什么样的路径，都能正确地只显示目录。
 local function set_smart_ld_alias(name, ls_args, dir_args)
     if lsd_exists or ls_exists then
         local base = (lsd_exists and lsd_base or ls_base) .. " " .. ls_args
@@ -187,23 +221,34 @@ local function set_smart_ld_alias(name, ls_args, dir_args)
         -- 4. 统一执行 base %A%
         os.setalias(name, [[@echo off $T set "A=$*" $T ]] ..
             [[set "L=%A:~-1%" $T set "L2=%A:~-2%" $T set "L3=%A:~-3%" $T ]] ..
-            [[if not defined A ( set "A=*/" ) ]] ..
-            [[else if not "%L3%"=="/*/" if not "%L3%"=="\*/" if not "%L3%"=="\*\" if not "%L3%"=="*\" if not "%L3%"=="*/" if "%L2%"=="*" ( set "A=%A%/" ) ]] ..
-            [[else if "%L2%"=="/*" ( set "A=%A%/" ) ]] ..
-            [[else if "%L2%"=="\*" ( set "A=%A%/" ) ]] ..
-            [[else if not "%L2%"=="*/" if not "%L2%"=="*\" if not "%L%"=="*" if "%L%"=="/" ( set "A=%A%*/" ) ]] ..
-            [[else if "%L%"=="\" ( set "A=%A%*/" ) ]] ..
-            [[else ( set "A=%A%/*/" ) $T ]] ..
-            base .. [[ %A% $T set "A=" $T set "L=" $T set "L2=" $T set "L3=" $T echo on]])
+            [[if not defined A (set "A=*/") ]] ..
+            [[else if not "%L3%"=="/*/" ]] ..
+            [[if not "%L3%"=="\*/" ]] ..
+            [[if not "%L3%"=="\*\" ]] ..
+            [[if not "%L3%"=="*\" ]] ..
+            [[if not "%L3%"=="*/" ]] ..
+            [[if "%L2%"=="*" (set "A=%A%/") ]] ..
+            [[else if "%L2%"=="/*" (set "A=%A%/") ]] ..
+            [[else if "%L2%"=="\*" (set "A=%A%/") ]] ..
+            [[else if not "%L2%"=="*/" ]] ..
+            [[if not "%L2%"=="*\" ]] ..
+            [[if not "%L%"=="*" ]] ..
+            [[if "%L%"=="/" (set "A=%A%*/") ]] ..
+            [[else if "%L%"=="\" (set "A=%A%*/") ]] ..
+            [[else (set "A=%A%/*/") $T ]] ..
+            base .. [[ %A% $T ]] ..
+            [[set "A=" $T set "L=" $T set "L2=" $T set "L3=" $T echo on]])
     else
+        local base = dir_base .. " " .. dir_args
         -- dir 模式重构：统一处理 A 后执行
-        os.setalias(name, [[@echo off $T set "A=$*" $T if not defined A (set "A= ") else (]] ..
-            [[set "E=%A:~-2%" $T if "%E%"=="*\" set "A=%A:~0,-1%") $T ]] ..
-            dir_base .. " " .. dir_args .. [[ %A% $T set "A=" $T set "E=" $T echo on]])
+        os.setalias(name, [[@echo off $T set "A=$*" $T set "E=%A:~-2%" $T ]] ..
+            [[if not defined A (set "A= ") ]] ..
+            [[else if "%E%"=="*\" (set "A=%A:~0,-1%") $T ]] ..
+            base .. [[ %A% $T ]] ..
+            [[set "A=" $T set "E=" $T echo on]])
     end
 end
 
--- ld 系列，显示目录但不显示文件
 set_smart_ld_alias('ld', '-d', '/D /A:D-H-S')
 set_smart_ld_alias('lld', '-ld', '/Q /A:D-H-S')
 set_smart_ld_alias('lad', '-ad', '/D /A:D')
@@ -211,17 +256,18 @@ set_smart_ld_alias('llad', '-lad', '/Q /A:D')
 set_smart_ld_alias('l1d', '-1d', '/B /A:D-H-S')
 set_smart_ld_alias('l1ad', '-1ad', '/B /A:D')
 
--- lf 系列，显示文件但不显示目录
--- 只 dir 实现，因为 ls 和 lsd 都没有直接的选项来过滤掉目录
--- 如果依赖 grep，反而会更慢（尤其是大目录），不如直接用 dir 的过滤功能
+-- lf 系列命令的目标跟 ld 正相反，只显示文件，但不显示目录。
+-- 暂时只用 dir 实现，因为 ls 和 lsd 都没有直接的选项来只显示文件。
+-- 如果依赖 grep，也只能实现 llf, llaf, l1f, l1af。
+-- lf 和 laf 这种非文件单列的用 grep 无法正确过滤。
 os.setalias('lf', dir_base .. ' /D /A:-D-H-S $*')
 os.setalias('llf', dir_base .. ' /Q /A:-D-H-S $*')
-os.setalias('laf', dir_base .. ' /D /A:-D $*') -- 只看文件（包含隐藏）
+os.setalias('laf', dir_base .. ' /D /A:-D $*')
 os.setalias('llaf', dir_base .. ' /Q /A:-D $*')
 os.setalias('l1f', dir_base .. ' /B /A:-D-H-S $*')
 os.setalias('l1af', dir_base .. ' /B /A:-D $*')
 
--- 安全删除与移动 (uutils coreutils)
+-- rm, mv, cp: 安全删除、移动和复制 (uutils coreutils)
 -- -i 会在操作前请求确认，-v 会显示过程
 if command_exists("rm") then
     os.setalias('rm', 'rm -iv $*')
@@ -241,7 +287,7 @@ else
     os.setalias('cp', 'copy $*')
 end
 
--- 增强搜索与查看
+-- grep: 增强搜索与查看
 if command_exists("rg") then
     os.setalias('grep', 'rg $*')
 elseif command_exists("grep") then
@@ -250,13 +296,14 @@ else
     os.setalias('grep', 'findstr /R $*')
 end
 
+-- cat: 文件查看器
 if command_exists("bat") then
     os.setalias('cat', 'bat --paging=never --style=plain $*')
 elseif not command_exists("cat") then
     os.setalias('cat', 'type $*')
 end
 
--- 进程管理
+-- top: 进程管理
 if command_exists("btop") then
     os.setalias('top', 'btop $*')
 elseif command_exists("btop4win") then
@@ -268,14 +315,14 @@ else
     os.setalias('top', 'resmon $*')
 end
 
+-- ps: 进程列表查看器
 if command_exists("procs") then
-    os.setalias('ps', 'procs --color always --paper disable $*') -- 进程列表查看器
+    os.setalias('ps', 'procs --color always --paper disable $*')
 else
     os.setalias('ps', 'tasklist /v $*')
 end
 
 -- kill系列，忽略 -9 等 Unix 讯号，强制按 PID 杀进程
--- 内部直接使用 set _P_= 来实现 unset 的功能
 os.setalias('kill',
     '@echo off $T set "_P_=" $T for %A in ($*) do set "_P_=%A" $T if defined _P_ taskkill /f /pid %_P_% $T set "_P_=" $T echo on')
 
@@ -286,6 +333,35 @@ os.setalias('killall',
 -- pkill: 按部分名称加通配符杀进程
 os.setalias('pkill',
     '@echo off $T set "_N_=" $T for %A in ($*) do set "_N_=%A" $T if defined _N_ taskkill /f /im %_N_%* $T set "_N_=" $T echo on')
+
+-- free: 显示内存使用情况
+if command_exists("free") then
+    os.setalias('free', 'free -h $*')
+else
+    -- Windows 没有直接等价的工具，使用 PowerShell 获取内存使用情况并格式化输出
+    os.setalias('free',
+        'powershell -NoLogo -NoProfile -command "$p = Get-CimInstance Win32_OperatingSystem; ' ..
+        '$phys = $p | Select-Object @{N=\'Type\';E={\'Physical\'}}, ' ..
+        '@{N=\'Total\';E={(\'{0:N2} GB\' -f ($_.TotalVisibleMemorySize/1MB))}}, ' ..
+        '@{N=\'Used\';E={(\'{0:N2} GB\' -f (($_.TotalVisibleMemorySize - $_.FreePhysicalMemory)/1MB))}}, ' ..
+        '@{N=\'Free\';E={(\'{0:N2} GB\' -f ($_.FreePhysicalMemory/1MB))}}, ' ..
+        '@{N=\'Used%\';E={(\'{0:P2}\' -f (1 - $_.FreePhysicalMemory / $_.TotalVisibleMemorySize))}}; ' ..
+        '$virt = $p | Select-Object @{N=\'Type\';E={\'Virtual\'}}, ' ..
+        '@{N=\'Total\';E={(\'{0:N2} GB\' -f ($_.TotalVirtualMemorySize/1MB))}}, ' ..
+        '@{N=\'Used\';E={(\'{0:N2} GB\' -f (($_.TotalVirtualMemorySize - $_.FreeVirtualMemory)/1MB))}}, ' ..
+        '@{N=\'Free\';E={(\'{0:N2} GB\' -f ($_.FreeVirtualMemory/1MB))}}, ' ..
+        '@{N=\'Used%\';E={(\'{0:P2}\' -f (1 - $_.FreeVirtualMemory / $_.TotalVirtualMemorySize))}}; ' ..
+        '$phys, $virt | Format-Table -AutoSize"'
+    )
+end
+
+-- uptime: 显示系统已运行时间及开机时间
+os.setalias('uptime',
+    'powershell -NoLogo -NoProfile -Command "$o=Get-CimInstance Win32_OperatingSystem; ' ..
+    '$s=$o.LastBootUpTime; $u=(Get-Date)-$s; ' ..
+    'write-host \'Up time:    \' -NoNewline; \'{0} days, {1} hours, {2} minutes\' -f $u.Days, $u.Hours, $u.Minutes; ' ..
+    'write-host \'Boot time:  \' $s"'
+)
 
 -- 其他常用 Linux 映射
 if command_exists("df") then
@@ -318,34 +394,6 @@ if not command_exists("which") then
     os.setalias('which', 'where $*') -- 查找可执行文件位置
 end
 
-if command_exists("free") then
-    os.setalias('free', 'free -h $*') -- 显示内存使用情况
-else
-    -- Windows 没有直接等价的工具，使用 PowerShell 获取内存使用情况并格式化输出
-    os.setalias('free',
-        'powershell -NoLogo -NoProfile -command "$p = Get-CimInstance Win32_OperatingSystem; ' ..
-        '$phys = $p | Select-Object @{N=\'Type\';E={\'Physical\'}}, ' ..
-        '@{N=\'Total\';E={(\'{0:N2} GB\' -f ($_.TotalVisibleMemorySize/1MB))}}, ' ..
-        '@{N=\'Used\';E={(\'{0:N2} GB\' -f (($_.TotalVisibleMemorySize - $_.FreePhysicalMemory)/1MB))}}, ' ..
-        '@{N=\'Free\';E={(\'{0:N2} GB\' -f ($_.FreePhysicalMemory/1MB))}}, ' ..
-        '@{N=\'Used%\';E={(\'{0:P2}\' -f (1 - $_.FreePhysicalMemory / $_.TotalVisibleMemorySize))}}; ' ..
-        '$virt = $p | Select-Object @{N=\'Type\';E={\'Virtual\'}}, ' ..
-        '@{N=\'Total\';E={(\'{0:N2} GB\' -f ($_.TotalVirtualMemorySize/1MB))}}, ' ..
-        '@{N=\'Used\';E={(\'{0:N2} GB\' -f (($_.TotalVirtualMemorySize - $_.FreeVirtualMemory)/1MB))}}, ' ..
-        '@{N=\'Free\';E={(\'{0:N2} GB\' -f ($_.FreeVirtualMemory/1MB))}}, ' ..
-        '@{N=\'Used%\';E={(\'{0:P2}\' -f (1 - $_.FreeVirtualMemory / $_.TotalVirtualMemorySize))}}; ' ..
-        '$phys, $virt | Format-Table -AutoSize"'
-    )
-end
-
--- uptime: 显示系统已运行时间及开机时间
-os.setalias('uptime',
-    'powershell -NoLogo -NoProfile -Command "$o=Get-CimInstance Win32_OperatingSystem; ' ..
-    '$s=$o.LastBootUpTime; $u=(Get-Date)-$s; ' ..
-    'write-host \'Up time:    \' -NoNewline; \'{0} days, {1} hours, {2} minutes\' -f $u.Days, $u.Hours, $u.Minutes; ' ..
-    'write-host \'Boot time:  \' $s"'
-)
-
 os.setalias('clear', 'cls')     -- 清屏
 os.setalias('unset', 'set $*=') -- 取消环境变量设置
 
@@ -357,10 +405,13 @@ os.setalias('......', 'cd ../../../../..')
 os.setalias('.......', 'cd ../../../../../..')
 os.setalias('........', 'cd ../../../../../../..')
 
--- Oh My Posh 初始化
+os.setalias('cool', '"' .. CLINK_EXE .. '" set >nul && echo clink reloaded.')
+
+-- ==================== Oh My Posh 初始化 ========================
 local omp_cache = clink_path .. "omp_cache.lua"
 -- 如果缓存不存在，则生成它（你可以手动删除它来更新主题）
-if not io.open(omp_cache, "r") then
+if not os.isfile(omp_cache) then
     os.execute('oh-my-posh init cmd --config jandedobbeleer > "' .. omp_cache .. '"')
 end
 dofile(omp_cache)
+-- ==============================================================
