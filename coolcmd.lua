@@ -339,20 +339,31 @@ if command_exists("free") then
     os.setalias('free', 'free -h $*')
 else
     -- Windows 没有直接等价的工具，使用 PowerShell 获取内存使用情况并格式化输出
-    os.setalias('free',
-        'powershell -NoLogo -NoProfile -command "$p = Get-CimInstance Win32_OperatingSystem; ' ..
-        '$phys = $p | Select-Object @{N=\'Type\';E={\'Physical\'}}, ' ..
-        '@{N=\'Total\';E={(\'{0:N2} GB\' -f ($_.TotalVisibleMemorySize/1MB))}}, ' ..
-        '@{N=\'Used\';E={(\'{0:N2} GB\' -f (($_.TotalVisibleMemorySize - $_.FreePhysicalMemory)/1MB))}}, ' ..
-        '@{N=\'Free\';E={(\'{0:N2} GB\' -f ($_.FreePhysicalMemory/1MB))}}, ' ..
-        '@{N=\'Used%\';E={(\'{0:P2}\' -f (1 - $_.FreePhysicalMemory / $_.TotalVisibleMemorySize))}}; ' ..
-        '$virt = $p | Select-Object @{N=\'Type\';E={\'Virtual\'}}, ' ..
-        '@{N=\'Total\';E={(\'{0:N2} GB\' -f ($_.TotalVirtualMemorySize/1MB))}}, ' ..
-        '@{N=\'Used\';E={(\'{0:N2} GB\' -f (($_.TotalVirtualMemorySize - $_.FreeVirtualMemory)/1MB))}}, ' ..
-        '@{N=\'Free\';E={(\'{0:N2} GB\' -f ($_.FreeVirtualMemory/1MB))}}, ' ..
-        '@{N=\'Used%\';E={(\'{0:P2}\' -f (1 - $_.FreeVirtualMemory / $_.TotalVirtualMemorySize))}}; ' ..
-        '$phys, $virt | Format-Table -AutoSize"'
-    )
+    local free_cmd = 'powershell -NoLogo -NoProfile -Command "' ..
+        '$z=Get-CimInstance Win32_OperatingSystem; ' ..
+        '$m=Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory; ' ..
+        '$pf=Get-CimInstance Win32_PageFileUsage; ' ..
+        -- 数据换算 (KB -> GB)
+        '$u_tot=$z.TotalVisibleMemorySize/1mb; ' ..
+        '$u_fre=$z.FreePhysicalMemory/1mb; ' ..
+        '$u_cac=($m.CacheBytes+$m.StandbyCacheNormalPriorityBytes+$m.StandbyCacheReserveBytes+$m.StandbyCacheCoreBytes)/1gb; ' ..
+        '$u_av=$u_fre+($m.StandbyCacheNormalPriorityBytes+$m.StandbyCacheReserveBytes+$m.StandbyCacheCoreBytes)/1gb; ' ..
+        '$u_sh=$m.WriteCacheMessagesPerSec/1mb; ' ..
+        '$u_usd=$u_tot-$u_av; ' ..
+        -- Swap 与 Commit
+        '$s_tot=$pf.AllocatedBaseSize/1kb; ' ..
+        '$s_usd=$pf.CurrentUsage/1kb; ' ..
+        '$s_fre=$s_tot-$s_usd; ' ..
+        '$c_tot=$z.TotalVirtualMemorySize/1mb; ' ..
+        '$c_usd=($z.TotalVirtualMemorySize-$z.FreeVirtualMemory)/1mb; ' ..
+        -- 构建输出
+        '$r=@(); ' ..
+        '$f=\'{0:N2}GB\'; ' ..
+        '$r+=New-Object PSObject -Property @{Type=\'Mem:\';   total=$f -f $u_tot; used=$f -f $u_usd; free=$f -f $u_fre; shared=$f -f $u_sh; \'buff/cache\'=$f -f $u_cac; available=$f -f $u_av}; ' ..
+        '$r+=New-Object PSObject -Property @{Type=\'Swap:\';  total=$f -f $s_tot; used=$f -f $s_usd; free=$f -f $s_fre; shared=\'---\'; \'buff/cache\'=\'---\'; available=\'---\'}; ' ..
+        '$r+=New-Object PSObject -Property @{Type=\'Commit:\';total=$f -f $c_tot; used=$f -f $c_usd; free=$f -f ($c_tot-$c_usd); shared=\'---\'; \'buff/cache\'=\'---\'; available=\'---\'}; ' ..
+        '$r | Select-Object Type,total,used,free,shared,\'buff/cache\',available | Format-Table -AutoSize"'
+    os.setalias('free', free_cmd)
 end
 
 -- uptime: 显示系统已运行时间及开机时间
