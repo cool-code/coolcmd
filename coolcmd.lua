@@ -397,10 +397,20 @@ if command_exists("du") then
 else
     -- Windows 没有直接等价的工具，使用 PowerShell 获取目录大小信息并格式化输出
     local du_cmd = 'powershell -NoLogo -NoProfile -Command "' ..
-        '$v_f={param($v_n); if([math]::Round($v_n) -eq 0){return \'0\'}; $v_u=\'B\',\'KB\',\'MB\',\'GB\',\'TB\'; $v_i=0; while($v_n -ge 1024 -and $v_i -lt 4){$v_n/=1024; $v_i++}; \'{0:N2} {1}\' -f $v_n,$v_u[$v_i]}; ' ..
-        '$v_t={param($v_s,$v_m); $v_rs=\'\'; $v_cur=0; foreach($v_c in $v_s.ToCharArray()){$v_st=if([int]$v_c -gt 255){2}else{1}; if($v_cur+$v_st+3 -gt $v_m){return $v_rs+\'...\'}; $v_rs+=$v_c; $v_cur+=$v_st}; return $v_s}; ' ..
-        '$v_rt=(Get-Item .).Root.Name; $v_z=(Get-CimInstance Win32_Volume -Filter \\"Name=\'$v_rt\'\\" 2>$null).BlockSize; if(!$v_z){$v_z=4096}; ' ..
-        '$v_s_S=0; $v_s_A=0; ' ..
+        -- 1. 單位換算函數 (唯一變數 $v_ff)
+        '$v_ff={param($v_n); if([math]::Round($v_n) -eq 0){return \'0\'}; $v_u=\'B\',\'KB\',\'MB\',\'GB\',\'TB\'; $v_x=0; while($v_n -ge 1024 -and $v_x -lt 4){$v_n/=1024; $v_x++}; \'{0:N2} {1}\' -f $v_n,$v_u[$v_x]}; ' ..
+        -- 2. 智慧截斷函數
+        '$v_ft={param($v_s,$v_m); $v_rs=\'\'; $v_cur=0; foreach($v_ch in $v_s.ToCharArray()){$v_st=if([int]$v_ch -gt 255){2}else{1}; if($v_cur+$v_st+3 -gt $v_m){return $v_rs+\'...\'}; $v_rs+=$v_ch; $v_cur+=$v_st}; return $v_s}; ' ..
+        -- 3. 彩色引擎 (避開 $t, $e, $i 等)
+        '$v_fc={param($v_cn,$v_id); $v_rst=\'[0m\'; if($v_id -eq 1){return \'[38;5;33m \'+$v_cn+$v_rst}; ' ..
+        '$v_ex=[System.IO.Path]::GetExtension($v_cn).ToLower(); ' ..
+        'if($v_ex -match \'.exe|.bat|.cmd\'){ return \'[38;5;40m \'+$v_cn+$v_rst } ' ..
+        'elseif($v_ex -match \'.zip|.7z|.rar|.tar|.gz\'){ return \'[38;5;208m \'+$v_cn+$v_rst } ' ..
+        'elseif($v_ex -match \'.jpg|.png|.webp|.gif|.ico\'){ return \'[38;5;135m \'+$v_cn+$v_rst } ' ..
+        'else { return \'[38;5;250m \'+$v_cn+$v_rst }}; ' ..
+        -- 4. 偵測與掃描
+        '$v_rp=(Get-Item .).Root.Name; $v_z=(Get-CimInstance Win32_Volume -Filter \\"Name=\'$v_rp\'\\" 2>$null).BlockSize; if(!$v_z){$v_z=4096}; ' ..
+        '$v_sS=0; $v_sA=0; $v_cl=\' \' * 15; ' ..
         'write-host (\'{0,-12} {1,-12} {2}\' -f \'Size\',\'Allocated\',\'Name\'); ' ..
         'write-host (\'{0,-12} {1,-12} {2}\' -f \'----\',\'---------\',\'----\'); ' ..
         'Get-ChildItem -Path \'.\\$*\' 2>$null | ForEach-Object { ' ..
@@ -409,30 +419,24 @@ else
         'Get-ChildItem $v_it.FullName -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { ' ..
         '$v_l=$_.Length; $v_cS+=$v_l; $v_cA+=[math]::Ceiling($v_l/$v_z)*$v_z; ' ..
         '$v_ct++; if($v_ct % 500 -eq 0){ ' ..
-        -- 核心优化 1：留出更大的安全余量 (-50)，并主动获取当前宽度
-        '$v_currW=[Console]::WindowWidth; if(!$v_currW){$v_currW=80}; $v_currM=$v_currW - 50; ' ..
-        '$v_sn=(&$v_t $v_it.Name $v_currM); ' ..
-        '[Console]::CursorLeft = 0; ' ..
-        -- 核心优化 2：用足够长的空格在行首进行一次「隐形擦除」
-        '$v_clr=\' \' * ($v_currW - 1); write-host $v_clr -NoNewline; [Console]::CursorLeft = 0; ' ..
-        'write-host (\'{0,-12} {1,-12} {2} [scan...]\' -f (&$v_f $v_cS), (&$v_f $v_ca), $v_sn) -NoNewline; ' ..
+        '[Console]::CursorLeft = 0; $v_clr=\' \' * ([Console]::WindowWidth - 1); write-host $v_clr -NoNewline; [Console]::CursorLeft = 0; ' ..
+        '$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth - 55)); ' ..
+        'write-host (\'{0,-12} {1,-12} {2} [scan...]\' -f (&$v_ff $v_cS), (&$v_ff $v_cA), (&$v_fc $v_sn 1)) -NoNewline; ' ..
         '} ' ..
         '}; ' ..
-        '$v_currW=[Console]::WindowWidth; if(!$v_currW){$v_currW=80}; $v_currM=$v_currW - 50; ' ..
-        '$v_sn=(&$v_t $v_it.Name $v_currM); [Console]::CursorLeft = 0; ' ..
-        '$v_clr=\' \' * ($v_currW - 1); write-host $v_clr -NoNewline; [Console]::CursorLeft = 0; ' ..
-        'write-host (\'{0,-12} {1,-12} {2}/\' -f (&$v_f $v_cS), (&$v_f $v_ca), $v_sn); ' ..
+        '[Console]::CursorLeft = 0; $v_clr=\' \' * ([Console]::WindowWidth - 1); write-host $v_clr -NoNewline; [Console]::CursorLeft = 0; ' ..
+        '$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth - 50)); ' ..
+        'write-host (\'{0,-12} {1,-12} {2}/\' -f (&$v_ff $v_cS), (&$v_ff $v_cA), (&$v_fc $v_sn 1)); ' ..
         '} else { ' ..
-        '$v_currW=[Console]::WindowWidth; if(!$v_currW){$v_currW=80}; $v_currM=$v_currW - 50; ' ..
-        '$v_sn=(&$v_t $v_it.Name $v_currM); ' ..
+        '$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth - 50)); ' ..
         '$v_cS=$v_it.Length; $v_cA=[math]::Ceiling($v_it.Length/$v_z)*$v_z; ' ..
-        'write-host (\'{0,-12} {1,-12} {2}\' -f (&$v_f $v_cS), (&$v_f $v_ca), $v_sn); ' ..
+        'write-host (\'{0,-12} {1,-12} {2}\' -f (&$v_ff $v_cS), (&$v_ff $v_cA), (&$v_fc $v_sn 0)); ' ..
         '}; ' ..
-        '$v_s_S+=$v_cS; $v_s_A+=$v_cA; ' ..
+        '$v_sS+=$v_cS; $v_sA+=$v_cA; ' ..
         '}; ' ..
         'write-host (\'-\' * 45); ' ..
-        'write-host (\'Total Size:      \' + (&$v_f $v_s_S)); ' ..
-        'write-host (\'Total Allocated: \' + (&$v_f $v_s_A)); ' ..
+        'write-host (\'Total Size:      \' + (&$v_ff $v_sS)); ' ..
+        'write-host (\'Total Allocated: \' + (&$v_ff $v_sA)); ' ..
         'write-host (\'(Based on \' + ($v_z/1KB) + \'KB cluster size)\')"'
 
     os.setalias('du', du_cmd)
