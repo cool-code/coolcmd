@@ -334,28 +334,42 @@ os.setalias('killall',
 os.setalias('pkill',
     '@echo off $T set "_N_=" $T for %A in ($*) do set "_N_=%A" $T if defined _N_ taskkill /f /im %_N_%* $T set "_N_=" $T echo on')
 
--- free: 显示内存使用情况
-if command_exists("free") then
-    os.setalias('free', 'free -h $*')
-else
-    -- Windows 没有直接等价的工具，使用 PowerShell 获取内存使用情况并格式化输出
-    local free_cmd = 'powershell -NoLogo -NoProfile -Command "' ..
-        '$f={param($n); if([math]::Round($n) -eq 0){return \'0\'}; $u=\'B\',\'KB\',\'MB\',\'GB\',\'TB\'; $i=0; while($n -ge 1024 -and $i -lt 4){$n/=1024; $i++}; \'{0:N2} {1}\' -f $n,$u[$i]}; ' ..
-        '$z=Get-CimInstance Win32_OperatingSystem; $m=Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory; $pf=Get-CimInstance Win32_PageFileUsage; ' ..
-        '$u_tot=$z.TotalVisibleMemorySize*1024; $u_fre=$z.FreePhysicalMemory*1024; ' ..
-        '$u_cac=$m.CacheBytes+$m.StandbyCacheNormalPriorityBytes+$m.StandbyCacheReserveBytes+$m.StandbyCacheCoreBytes; ' ..
-        '$u_av=$u_fre+$m.StandbyCacheNormalPriorityBytes+$m.StandbyCacheReserveBytes+$m.StandbyCacheCoreBytes; ' ..
-        '$u_sh=$m.WriteCacheMessagesPerSec*1024; $u_usd=$u_tot-$u_av; ' ..
-        '$s_tot=$pf.AllocatedBaseSize*1024*1024; $s_usd=$pf.CurrentUsage*1024*1024; ' ..
-        '$c_tot=$z.TotalVirtualMemorySize*1024; $c_usd=$c_tot-$z.FreeVirtualMemory*1024; ' ..
-        '$r=@(); ' ..
-        '$r+=New-Object PSObject -Property @{Type=\'Mem:\';   total=(&$f $u_tot); used=(&$f $u_usd); free=(&$f $u_fre); shared=(&$f $u_sh); \'buff/cache\'=(&$f $u_cac); available=(&$f $u_av)}; ' ..
-        '$r+=New-Object PSObject -Property @{Type=\'Swap:\';  total=(&$f $s_tot); used=(&$f $s_usd); free=(&$f ($s_tot-$s_usd)); shared=\'---\'; \'buff/cache\'=\'---\'; available=\'---\'}; ' ..
-        '$r+=New-Object PSObject -Property @{Type=\'Commit:\';total=(&$f $c_tot); used=(&$f $c_usd); free=(&$f ($c_tot-$c_usd)); shared=\'---\'; \'buff/cache\'=\'---\'; available=\'---\'}; ' ..
-        '($r | Select-Object Type,total,used,free,shared,\'buff/cache\',available | Format-Table -AutoSize | Out-String).Trim()"'
+-- free: 显示内存使用情况，这个是彩色增强版。
+local free_cmd = 'powershell -NoLogo -NoProfile -command "' ..
+    -- 1. 基础变量
+    '$v_rs=\'\27[0m\'; ' ..
+    '$v_u_list=\' B;KB;MB;GB;TB;PB;EB\'.Split(\';\'); ' ..
+    '$v_c_list=\'196;208;220;40;39;33;135\'.Split(\';\') | ForEach-Object { \'\27[38;5;\'+$_+\'m\' }; ' ..
+    -- 2. 核心格式化函数 (返回 12 位宽度的带颜色字串)
+    '$v_f = { param($v_val, $v_col); ' ..
+    'if($v_val -le 0){ return (\'\27[38;5;242m0\' + (\' \' * 11) + $v_rs) }; ' ..
+    '$v_idx=0; $v_num=[double]$v_val; ' ..
+    'while($v_num -ge 1024 -and $v_idx -lt 6){ $v_num /= 1024; $v_idx++ }; ' ..
+    '$v_dn=\'{0:N2}\' -f $v_num; $v_un=$v_u_list[$v_idx]; $v_uc=$v_c_list[$v_idx]; ' ..
+    '$v_txt=$v_dn + \' \' + $v_un; $v_pad=\' \' * (12 - $v_txt.Length); ' ..
+    'if($v_pad.Length -lt 0){$v_pad=\'\'}; ' ..
+    'return ($v_col + $v_dn + \' \' + $v_uc + $v_un + $v_rs + $v_pad) ' ..
+    '}; ' ..
+    -- 3. 获取数据
+    '$v_os=Get-CimInstance Win32_OperatingSystem; $v_mem=Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory; $v_pg=Get-CimInstance Win32_PageFileUsage; ' ..
+    '$v_tm=[double]$v_os.TotalVisibleMemorySize*1024; $v_fm=[double]$v_os.FreePhysicalMemory*1024; ' ..
+    '$v_std=[double]($v_mem.StandbyCacheNormalPriorityBytes + $v_mem.StandbyCacheReserveBytes + $v_mem.StandbyCacheCoreBytes); ' ..
+    '$v_ca=[double]$v_mem.CacheBytes + $v_std; $v_av=$v_fm + $v_std; $v_sh=[double]$v_mem.WriteCacheMessagesPerSec * 1024; $v_us=$v_tm - $v_av; ' ..
+    '$v_stt=([double]($v_pg | Measure-Object -Property AllocatedBaseSize -Sum).Sum) * 1024 * 1024; ' ..
+    '$v_stu=([double]($v_pg | Measure-Object -Property CurrentUsage -Sum).Sum) * 1024 * 1024; ' ..
+    '$v_ctt=[double]$v_os.TotalVirtualMemorySize * 1024; $v_ctu=$v_ctt - ([double]$v_os.FreeVirtualMemory * 1024); ' ..
+    -- 4. 建立彩虹表头颜色 (首列红色 196)
+    '$v_h1=\'\27[38;5;196mType       \'; $v_h2=\'\27[38;5;208mtotal        \'; $v_h3=\'\27[38;5;220mused         \'; $v_h4=\'\27[38;5;40mfree         \'; $v_h5=\'\27[38;5;39mshared       \'; $v_h6=\'\27[38;5;33mbuff/cache   \'; $v_h7=\'\27[38;5;135mavailable\' + $v_rs; ' ..
+    'write-host ($v_h1 + $v_h2 + $v_h3 + $v_h4 + $v_h5 + $v_h6 + $v_h7); ' ..
+    -- 5. 输出横线 (避开 * 运算符引发的报错)
+    'write-host (\'\27[38;5;242m---------- ------------ ------------ ------------ ------------ ------------ ------------\' + $v_rs); ' ..
+    -- 6. 输出彩色行 (首列红色)
+    '$v_s3=\'\27[38;5;242m---         \' + $v_rs; $v_sp=\' \'; $v_lbl=\'\27[38;5;196m\'; ' ..
+    'write-host ($v_lbl+\'Mem:       \') -NoNewline; write-host (&$v_f $v_tm (\'\27[38;5;208m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f $v_us (\'\27[38;5;220m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f $v_fm (\'\27[38;5;40m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f $v_sh (\'\27[38;5;39m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f $v_ca (\'\27[38;5;33m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f $v_av (\'\27[38;5;135m\')); ' ..
+    'write-host ($v_lbl+\'Swap:      \') -NoNewline; write-host (&$v_f $v_stt (\'\27[38;5;208m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f $v_stu (\'\27[38;5;220m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f ($v_stt-$v_stu) (\'\27[38;5;40m\')) -NoNewline; write-host $v_sp -NoNewline; write-host $v_s3 -NoNewline; write-host $v_sp -NoNewline; write-host $v_s3 -NoNewline; write-host $v_sp -NoNewline; write-host $v_s3; ' ..
+    'write-host ($v_lbl+\'Commit:    \') -NoNewline; write-host (&$v_f $v_ctt (\'\27[38;5;208m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f $v_ctu (\'\27[38;5;220m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f ($v_ctt-$v_ctu) (\'\27[38;5;40m\')) -NoNewline; write-host $v_sp -NoNewline; write-host $v_s3 -NoNewline; write-host $v_sp -NoNewline; write-host $v_s3 -NoNewline; write-host $v_sp -NoNewline; write-host $v_s3;"'
 
-    os.setalias('free', free_cmd)
-end
+os.setalias('free', free_cmd)
 
 -- uptime: 显示系统已运行时间及开机时间
 os.setalias('uptime',
@@ -365,45 +379,64 @@ os.setalias('uptime',
     'write-host \'Boot time:  \' $s"'
 )
 
--- 其他常用 Linux 映射
-if command_exists("df") then
-    os.setalias('df', 'df -h $*') -- 以易读的格式显示磁盘空间
-else
-    -- Windows 没有直接等价的工具，使用 PowerShell 获取磁盘空间信息并格式化输出
-    local df_cmd = 'powershell -NoLogo -NoProfile -Command "' ..
-        '$f={param($n); if([math]::Round($n) -eq 0){return \'0\'}; $unit=\'B\',\'KB\',\'MB\',\'GB\',\'TB\'; $x=0; while($n -ge 1024 -and $x -lt 4){$n/=1024; $x++}; \'{0:N2}{1}\' -f $n,$unit[$x]}; ' ..
-        '$vlist = Get-Volume; ' ..
-        '$rlist = Get-PSDrive -PSProvider FileSystem | ForEach-Object { ' ..
-        '$c=$_; $vol=$vlist | Where-Object { $_.DriveLetter -eq $c.Name }; ' ..
-        'if($vol){ $nm=if($vol.FileSystemLabel){$vol.FileSystemLabel} else {\'Volume\'}; $fs=$vol.FileSystem } ' ..
-        'else { $rt=if($c.DisplayRoot){$c.DisplayRoot.ToLower()} else {\'\'}; $nm=if($rt){$c.DisplayRoot} else {\'Remote\'}; ' ..
-        '$fs=if($rt -like \'\\\\*\'){\'SMB\'}elseif($rt -like \'http*\'){\'WebDAV\'}elseif($rt -like \'*sshfs*\'){\'SSHFS\'} else {\'Net\'} }; ' ..
-        'New-Object PSObject -Property @{ ' ..
-        'M = $c.Name + \':\'; ' ..
-        'Size = (&$f ($c.Used + $c.Free)); ' ..
-        'Used = (&$f $c.Used); ' ..
-        'Avail = (&$f $c.Free); ' ..
-        'P = $(if($c.Used -gt 0){ \'{0:P0}\' -f ($c.Used/($c.Used+$c.Free)) } else {\'0%\'}); ' ..
-        'Filesystem = \'{0}({1})\' -f $nm,$fs ' ..
-        '} ' ..
-        '}; ' ..
-        '($rlist | Sort-Object M | Select-Object @{N=\'Mounted\';E={$_.M}},Size,Used,Avail,@{N=\'Use%\';E={$_.P}},Filesystem | Format-Table -AutoSize | Out-String).Trim()"'
+-- df: 显示磁盘空间使用情况，这个是彩色增强版。
+local df_cmd = 'powershell -NoLogo -NoProfile -command "' ..
+    -- 1. 初始化环境
+    '$v_rs=\'\27[0m\'; ' ..
+    '$v_u_list=\'B;KB;MB;GB;TB;PB;EB\'.Split(\';\'); ' ..
+    '$v_c_list=\'196;208;220;40;39;33;135\'.Split(\';\') | ForEach-Object { \'\27[38;5;\'+$_+\'m\' }; ' ..
+    -- 2. 格式化函数
+    '$v_ff = { param($v_val, $v_col); ' ..
+    'if($v_val -le 0){ return (\'\27[38;5;242m0           \' + $v_rs) }; ' ..
+    '$v_idx=0; $v_num=[double]$v_val; ' ..
+    'while($v_num -ge 1024 -and $v_idx -lt 6){ $v_num /= 1024; $v_idx++ }; ' ..
+    '$v_dn=\'{0:N2}\' -f $v_num; $v_un=$v_u_list[$v_idx]; $v_uc=$v_c_list[$v_idx]; ' ..
+    '$v_txt=$v_dn + \' \' + $v_un; $v_pad=\' \' * (10 - $v_txt.Length); ' ..
+    'if($v_pad.Length -lt 0){$v_pad=\'\'}; ' ..
+    'return ($v_rs + $v_pad + $v_col + $v_dn + \' \' + $v_uc + $v_un) ' ..
+    '}; ' ..
+    -- 3. 获取数据
+    '$v_vl = Get-Volume; $v_sp=\' \'; $v_lbl=\'\27[38;5;196m\'; ' ..
+    -- 4. 输出彩虹表头
+    '$v_h1=\'\27[38;5;196mMounted \'; $v_h2=\'\27[38;5;208m   total   \'; $v_h3=\'\27[38;5;220m   used    \'; $v_h4=\'\27[38;5;40m   avail   \'; $v_h5=\'\27[38;5;39mUse% \'; $v_h6=\'\27[38;5;33mFilesystem\' + $v_rs; ' ..
+    'write-host ($v_h1 + $v_h2 + $v_h3 + $v_h4 + $v_h5 + $v_h6); ' ..
+    -- 5. 分割线
+    'write-host (\'\27[38;5;242m------- ---------- ---------- ---------- ---- ----------\' + $v_rs); ' ..
+    -- 6. 主循环
+    'Get-PSDrive -PSProvider FileSystem | ForEach-Object { ' ..
+    '$c=$_; $v_vo=$v_vl | Where-Object { $_.DriveLetter -eq $c.Name }; ' ..
+    'if($v_vo){ $v_nm=if($v_vo.FileSystemLabel){$v_vo.FileSystemLabel}else{\'Volume\'}; $v_fs=$v_vo.FileSystem; $v_fsc=\'\27[38;5;135m\' } ' ..
+    'else { $v_rt=if($c.DisplayRoot){$c.DisplayRoot.ToLower()}else{\'\'}; $v_nm=if($v_rt){$c.DisplayRoot}else{\'Remote\'}; ' ..
+    '$v_fs=if($v_rt -like \'\\\\*\'){\'SMB\'}elseif($v_rt -like \'http*\'){\'WebDAV\'}else{\'Net\'}; $v_fsc=\'\27[38;5;208m\' }; ' ..
+    '$v_tt=$c.Used+$c.Free; $v_up=if($v_tt -gt 0){$c.Used/$v_tt}else{0}; ' ..
+    '$v_uc=if($v_up -gt 0.9){\'\27[38;5;196m\'}elseif($v_up -gt 0.7){\'\27[38;5;214m\'}else{\'\27[38;5;40m\'}; ' ..
+    '$v_pct=([math]::Round($v_up*100)).ToString().PadLeft(3) + \'%\'; ' ..
+    -- 物理补齐首列空格
+    '$v_mt=$c.Name + [char]58; $v_mp=\' \' * (6 - $v_mt.Length); ' ..
+    'write-host ($v_rs + $v_sp + $v_lbl + $v_mt + $v_rs + $v_mp + $v_sp) -NoNewline; ' ..
+    'write-host (&$v_ff $v_tt (\'\27[38;5;208m\')) -NoNewline; write-host $v_sp -NoNewline; ' ..
+    'write-host (&$v_ff $c.Used (\'\27[38;5;220m\')) -NoNewline; write-host $v_sp -NoNewline; ' ..
+    'write-host (&$v_ff $c.Free (\'\27[38;5;40m\')) -NoNewline; write-host $v_sp -NoNewline; ' ..
+    'write-host ($v_uc + $v_pct + $v_rs + $v_sp) -NoNewline; ' ..
+    -- 卷标与路径上色 (蓝色 33) + 协议上色 (紫色 135)
+    'write-host (\'\27[38;5;33m\' + $v_nm + $v_rs + [char]32 + [char]40 + $v_fsc + $v_fs + $v_rs + [char]41); ' ..
+    '} | Sort-Object Mounted;"'
 
-    os.setalias('df', df_cmd)
-end
+os.setalias('df', df_cmd)
 
--- 增强版的统计目录或文件磁盘空间使用情况的 du 命令
+
+-- du: 统计目录或文件磁盘空间使用情况，这个是彩色增强版。
 -- Windows 没有直接等价的工具，使用 PowerShell 获取目录大小信息并格式化输出
 local du_cmd = 'powershell -NoLogo -NoProfile -Command "' ..
     -- 1. 彩虹单位颜色映射函数
     '$v_f_unit={param($v_n,$v_base_clr); ' ..
-    'if([math]::Round($v_n) -eq 0){ $v_s=\'0\'.PadRight(12); return \'[38;5;242m\'+$v_s+\'[0m\' }; ' ..
+    'if([math]::Round($v_n) -eq 0){ $v_s=\'0\'.PadRight(12); return \'\27[38;5;242m\'+$v_s+\'\27[0m\' }; ' ..
     '$v_u=@(\'B\',\'KB\',\'MB\',\'GB\',\'TB\',\'PB\',\'EB\'); ' ..
-    '$v_uc=@(\'[38;5;196m\',\'[38;5;208m\',\'[38;5;220m\',\'[38;5;40m\',\'[38;5;39m\',\'[38;5;33m\',\'[38;5;135m\'); ' ..
+    '$v_uc=@(\'\27[38;5;196m\',\'\27[38;5;208m\',\'\27[38;5;220m\',\'\27[38;5;40m\',\'\27[38;5;39m\',\'\27[38;5;33m\',\'\27[38;5;135m\'); ' ..
     '$v_x=0; while($v_n -ge 1024 -and $v_x -lt 6){$v_n/=1024; $v_x++}; ' ..
     '$v_num=\'{0:N2}\' -f $v_n; $v_unit=\' {0}\' -f $v_u[$v_x]; ' ..
     '$v_pad=\' \' * (12 - $v_num.Length - $v_unit.Length); ' ..
-    'return $v_base_clr + $v_num + \'[0m\' + $v_uc[$v_x] + $v_unit + \'[0m\' + $v_pad; ' ..
+    'return $v_base_clr + $v_num + \'\27[0m\' + $v_uc[$v_x] + $v_unit + \'\27[0m\' + $v_pad; ' ..
     '}; ' ..
     -- 2. 智慧语义截断函数 (保留后缀版，避开 $true/$false)
     '$v_ft={param($v_s,$v_m,$v_is_d); ' ..
@@ -418,20 +451,20 @@ local du_cmd = 'powershell -NoLogo -NoProfile -Command "' ..
     '} ' ..
     '}; ' ..
     -- 3. LS_COLORS & 图标渲染
-    '$v_lc=@{}; $env:LS_COLORS -split \':\' | ForEach-Object { $v_kv=$_.Split(\'=\'); if($v_kv.Length -eq 2){ $v_lc[$v_kv]=\'[\' + $v_kv + \'m\' } }; ' ..
-    '$v_fc={param($v_cn,$v_is_d); $v_rst=\'[0m\'; if($v_is_d -eq 1){ $v_clr=if($v_lc[\'di\']){$v_lc[\'di\']}else{\'[38;5;33m\'}; return $v_clr+\' \'+$v_cn+$v_rst }; ' ..
-    '$v_ex=[System.IO.Path]::GetExtension($v_cn).ToLower(); $v_clr=if($v_lc[\'*\'+$v_ex]){$v_lc[\'*\'+$v_ex]}else{\'[38;5;250m\'}; ' ..
-    'if($v_ex -match \'.exe|.bat|.cmd\'){ return \'[38;5;40m \'+$v_cn+$v_rst } ' ..
-    'elseif($v_ex -match \'.zip|.7z|.rar|.tar|.gz\'){ return \'[38;5;208m \'+$v_cn+$v_rst } ' ..
-    'elseif($v_ex -match \'.jpg|.png|.webp|.gif|.ico\'){ return \'[38;5;135m \'+$v_cn+$v_rst } ' ..
-    'elseif($v_ex -match \'.mp4|.mkv|.avi|.mp3|.wav\'){ return \'[38;5;161m \'+$v_cn+$v_rst } ' ..
-    'elseif($v_ex -match \'.txt|.md|.pdf|.doc\'){ return \'[38;5;253m \'+$v_cn+$v_rst } ' ..
+    '$v_lc=@{}; $env:LS_COLORS -split \':\' | ForEach-Object { $v_kv=$_.Split(\'=\'); if($v_kv.Length -eq 2){ $v_lc[$v_kv]=\'\27[\' + $v_kv + \'m\' } }; ' ..
+    '$v_fc={param($v_cn,$v_is_d); $v_rst=\'\27[0m\'; if($v_is_d -eq 1){ $v_clr=if($v_lc[\'di\']){$v_lc[\'di\']}else{\'\27[38;5;33m\'}; return $v_clr+\' \'+$v_cn+$v_rst }; ' ..
+    '$v_ex=[System.IO.Path]::GetExtension($v_cn).ToLower(); $v_clr=if($v_lc[\'*\'+$v_ex]){$v_lc[\'*\'+$v_ex]}else{\'\27[38;5;250m\'}; ' ..
+    'if($v_ex -match \'.exe|.bat|.cmd\'){ return \'\27[38;5;40m \'+$v_cn+$v_rst } ' ..
+    'elseif($v_ex -match \'.zip|.7z|.rar|.tar|.gz\'){ return \'\27[38;5;208m \'+$v_cn+$v_rst } ' ..
+    'elseif($v_ex -match \'.jpg|.png|.webp|.gif|.ico\'){ return \'\27[38;5;135m \'+$v_cn+$v_rst } ' ..
+    'elseif($v_ex -match \'.mp4|.mkv|.avi|.mp3|.wav\'){ return \'\27[38;5;161m \'+$v_cn+$v_rst } ' ..
+    'elseif($v_ex -match \'.txt|.md|.pdf|.doc\'){ return \'\27[38;5;253m \'+$v_cn+$v_rst } ' ..
     'else { return $v_clr+\' \'+$v_cn+$v_rst }}; ' ..
     -- 4. 侦测与主循环
     '$v_rp=(Get-Item .).Root.Name; $v_z=(Get-CimInstance Win32_Volume -Filter \\"Name=\'$v_rp\'\\" 2>$null).BlockSize; if(!$v_z){$v_z=4096}; ' ..
     '$v_sS=0; $v_sA=0; $v_cl=\' \' * 10; ' ..
-    'write-host (\'[38;5;220mSize         [38;5;39mAllocated    [38;5;253mName[0m\'); ' ..
-    'write-host (\'[38;5;242m------------ ------------ --------------------[0m\'); ' ..
+    'write-host (\'\27[38;5;220mSize         \27[38;5;39mAllocated    \27[38;5;253mName\27[0m\'); ' ..
+    'write-host (\'\27[38;5;242m------------ ------------ --------------------\27[0m\'); ' ..
     'Get-ChildItem -Path \'.\\$*\' 2>$null | ForEach-Object { ' ..
     '$v_it=$_; if($v_it.PSIsContainer){ ' ..
     '$v_cS=0; $v_cA=0; $v_ct=0; ' ..
@@ -441,23 +474,23 @@ local du_cmd = 'powershell -NoLogo -NoProfile -Command "' ..
     '$v_curW=[Console]::WindowWidth; if(!$v_curW){$v_curW=80}; $v_curM=$v_curW - 55; ' ..
     '$v_sn=(&$v_ft $v_it.Name $v_curM 1); ' .. -- 使用 1 代替 $true
     '[Console]::CursorLeft = 0; $v_clr=\' \' * ($v_curW - 1); write-host $v_clr -NoNewline; [Console]::CursorLeft = 0; ' ..
-    'write-host (\'{0} {1} {2} [38;5;242m[scan...][0m\' -f (&$v_f_unit $v_cS \'[38;5;214m\'), (&$v_f_unit $v_cA \'[38;5;39m\'), (&$v_fc $v_sn 1)) -NoNewline; ' ..
+    'write-host (\'{0} {1} {2} \27[38;5;242m[scan...]\27[0m\' -f (&$v_f_unit $v_cS \'\27[38;5;214m\'), (&$v_f_unit $v_cA \'\27[38;5;39m\'), (&$v_fc $v_sn 1)) -NoNewline; ' ..
     '} ' ..
     '}; ' ..
     '[Console]::CursorLeft = 0; $v_clr=\' \' * ([Console]::WindowWidth - 1); write-host $v_clr -NoNewline; [Console]::CursorLeft = 0; ' ..
     '$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth - 50) 1); ' .. -- 使用 1 代替 $true
-    'write-host (\'{0} {1} {2}/\' -f (&$v_f_unit $v_cS \'[38;5;214m\'), (&$v_f_unit $v_cA \'[38;5;39m\'), (&$v_fc $v_sn 1)); ' ..
+    'write-host (\'{0} {1} {2}/\' -f (&$v_f_unit $v_cS \'\27[38;5;214m\'), (&$v_f_unit $v_cA \'\27[38;5;39m\'), (&$v_fc $v_sn 1)); ' ..
     '} else { ' ..
     '$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth - 50) 0); ' .. -- 使用 0 代替 $false
     '$v_cS=$v_it.Length; $v_cA=[math]::Ceiling($v_it.Length/$v_z)*$v_z; ' ..
-    'write-host (\'{0} {1} {2}\' -f (&$v_f_unit $v_cS \'[38;5;214m\'), (&$v_f_unit $v_cA \'[38;5;39m\'), (&$v_fc $v_sn 0)); ' ..
+    'write-host (\'{0} {1} {2}\' -f (&$v_f_unit $v_cS \'\27[38;5;214m\'), (&$v_f_unit $v_cA \'\27[38;5;39m\'), (&$v_fc $v_sn 0)); ' ..
     '}; ' ..
     '$v_sS+=$v_cS; $v_sA+=$v_cA; ' ..
     '}; ' ..
-    'write-host (\'[38;5;242m\' + (\'-\' * 45) + \'[0m\'); ' ..
-    'write-host (\'Total Size:      \' + (&$v_f_unit $v_sS \'[38;5;214m\')); ' ..
-    'write-host (\'Total Allocated: \' + (&$v_f_unit $v_sA \'[38;5;39m\')); ' ..
-    'write-host (\'[38;5;242m(Based on \' + ($v_z/1KB) + \'KB cluster size)[0m\')"'
+    'write-host (\'\27[38;5;242m\' + (\'-\' * 45) + \'\27[0m\'); ' ..
+    'write-host (\'Total Size:      \' + (&$v_f_unit $v_sS \'\27[38;5;214m\')); ' ..
+    'write-host (\'Total Allocated: \' + (&$v_f_unit $v_sA \'\27[38;5;39m\')); ' ..
+    'write-host (\'\27[38;5;242m(Based on \' + ($v_z/1KB) + \'KB cluster size)\27[0m\')"'
 
 os.setalias('du', du_cmd)
 
