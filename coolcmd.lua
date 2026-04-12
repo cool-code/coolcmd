@@ -471,13 +471,12 @@ end
 os.setalias('clear', 'cls')     -- 清屏
 os.setalias('unset', 'set $*=') -- 取消环境变量设置
 
-os.setalias('..', 'cd ..')
-os.setalias('...', 'cd ../..')
-os.setalias('....', 'cd ../../..')
-os.setalias('.....', 'cd ../../../..')
-os.setalias('......', 'cd ../../../../..')
-os.setalias('.......', 'cd ../../../../../..')
-os.setalias('........', 'cd ../../../../../../..')
+-- 支持 .. ... .... ... 最多到 16 级的 cd 返回
+for i = 2, 16 do
+    local dots = string.rep(".", i)
+    local path = "cd " .. string.rep("../", i - 1)
+    os.setalias(dots, path)
+end
 
 os.setalias('cool', '"' .. CLINK_EXE .. '" set >nul && echo clink reloaded.')
 
