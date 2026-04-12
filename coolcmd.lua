@@ -392,77 +392,74 @@ else
     os.setalias('df', df_cmd)
 end
 
-if command_exists("du") then
-    os.setalias('du', 'du -h -d1 $*') -- 显示当前目录下各文件夹大小
-else
-    -- Windows 没有直接等价的工具，使用 PowerShell 获取目录大小信息并格式化输出
-    local du_cmd = 'powershell -NoLogo -NoProfile -Command "' ..
-        -- 1. 彩虹单位颜色映射函数
-        '$v_f_unit={param($v_n,$v_base_clr); ' ..
-        'if([math]::Round($v_n) -eq 0){ $v_s=\'0\'.PadRight(12); return \'[38;5;242m\'+$v_s+\'[0m\' }; ' ..
-        '$v_u=@(\'B\',\'KB\',\'MB\',\'GB\',\'TB\',\'PB\',\'EB\'); ' ..
-        '$v_uc=@(\'[38;5;196m\',\'[38;5;208m\',\'[38;5;220m\',\'[38;5;40m\',\'[38;5;39m\',\'[38;5;33m\',\'[38;5;135m\'); ' ..
-        '$v_x=0; while($v_n -ge 1024 -and $v_x -lt 6){$v_n/=1024; $v_x++}; ' ..
-        '$v_num=\'{0:N2}\' -f $v_n; $v_unit=\' {0}\' -f $v_u[$v_x]; ' ..
-        '$v_pad=\' \' * (12 - $v_num.Length - $v_unit.Length); ' ..
-        'return $v_base_clr + $v_num + \'[0m\' + $v_uc[$v_x] + $v_unit + \'[0m\' + $v_pad; ' ..
-        '}; ' ..
-        -- 2. 智慧语义截断函数 (保留后缀版，避开 $true/$false)
-        '$v_ft={param($v_s,$v_m,$v_is_d); ' ..
-        '$v_enc=[System.Text.Encoding]::GetEncoding(0); ' ..
-        'if($v_enc.GetByteCount($v_s) -le $v_m){return $v_s}; ' ..
-        'if($v_is_d -eq 1){ ' .. -- 使用 1 代替 $true
-        '$v_res=\'\'; $v_cur=0; foreach($v_ch in $v_s.ToCharArray()){$v_st=if([int]$v_ch -gt 255){2}else{1}; if($v_cur+$v_st+3 -gt $v_m){return $v_res+\'...\'}; $v_res+=$v_ch; $v_cur+=$v_st}; return $v_res; ' ..
-        '} else { ' ..           -- 档案采取 "主文件名...扩展名" 策略
-        '$v_ext=[System.IO.Path]::GetExtension($v_s); $v_base=[System.IO.Path]::GetFileNameWithoutExtension($v_s); ' ..
-        '$v_eLen=$v_enc.GetByteCount($v_ext); $v_bMax=$v_m - $v_eLen - 3; if($v_bMax -lt 3){$v_bMax=3}; ' ..
-        '$v_res=\'\'; $v_cur=0; foreach($v_ch in $v_base.ToCharArray()){$v_st=if([int]$v_ch -gt 255){2}else{1}; if($v_cur+$v_st -gt $v_bMax){return $v_res+\'...\'+$v_ext}; $v_res+=$v_ch; $v_cur+=$v_st}; return $v_res+$v_ext; ' ..
-        '} ' ..
-        '}; ' ..
-        -- 3. LS_COLORS & 图标渲染
-        '$v_lc=@{}; $env:LS_COLORS -split \':\' | ForEach-Object { $v_kv=$_.Split(\'=\'); if($v_kv.Length -eq 2){ $v_lc[$v_kv]=\'[\' + $v_kv + \'m\' } }; ' ..
-        '$v_fc={param($v_cn,$v_is_d); $v_rst=\'[0m\'; if($v_is_d -eq 1){ $v_clr=if($v_lc[\'di\']){$v_lc[\'di\']}else{\'[38;5;33m\'}; return $v_clr+\' \'+$v_cn+$v_rst }; ' ..
-        '$v_ex=[System.IO.Path]::GetExtension($v_cn).ToLower(); $v_clr=if($v_lc[\'*\'+$v_ex]){$v_lc[\'*\'+$v_ex]}else{\'[38;5;250m\'}; ' ..
-        'if($v_ex -match \'.exe|.bat|.cmd\'){ return \'[38;5;40m \'+$v_cn+$v_rst } ' ..
-        'elseif($v_ex -match \'.zip|.7z|.rar|.tar|.gz\'){ return \'[38;5;208m \'+$v_cn+$v_rst } ' ..
-        'elseif($v_ex -match \'.jpg|.png|.webp|.gif|.ico\'){ return \'[38;5;135m \'+$v_cn+$v_rst } ' ..
-        'elseif($v_ex -match \'.mp4|.mkv|.avi|.mp3|.wav\'){ return \'[38;5;161m \'+$v_cn+$v_rst } ' ..
-        'elseif($v_ex -match \'.txt|.md|.pdf|.doc\'){ return \'[38;5;253m \'+$v_cn+$v_rst } ' ..
-        'else { return $v_clr+\' \'+$v_cn+$v_rst }}; ' ..
-        -- 4. 侦测与主循环
-        '$v_rp=(Get-Item .).Root.Name; $v_z=(Get-CimInstance Win32_Volume -Filter \\"Name=\'$v_rp\'\\" 2>$null).BlockSize; if(!$v_z){$v_z=4096}; ' ..
-        '$v_sS=0; $v_sA=0; $v_cl=\' \' * 10; ' ..
-        'write-host (\'[38;5;220mSize         [38;5;39mAllocated    [38;5;253mName[0m\'); ' ..
-        'write-host (\'[38;5;242m------------ ------------ --------------------[0m\'); ' ..
-        'Get-ChildItem -Path \'.\\$*\' 2>$null | ForEach-Object { ' ..
-        '$v_it=$_; if($v_it.PSIsContainer){ ' ..
-        '$v_cS=0; $v_cA=0; $v_ct=0; ' ..
-        'Get-ChildItem $v_it.FullName -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { ' ..
-        '$v_l=$_.Length; $v_cS+=$v_l; $v_cA+=[math]::Ceiling($v_l/$v_z)*$v_z; ' ..
-        '$v_ct++; if($v_ct % 500 -eq 0){ ' ..
-        '$v_curW=[Console]::WindowWidth; if(!$v_curW){$v_curW=80}; $v_curM=$v_curW - 55; ' ..
-        '$v_sn=(&$v_ft $v_it.Name $v_curM 1); ' .. -- 使用 1 代替 $true
-        '[Console]::CursorLeft = 0; $v_clr=\' \' * ($v_curW - 1); write-host $v_clr -NoNewline; [Console]::CursorLeft = 0; ' ..
-        'write-host (\'{0} {1} {2} [38;5;242m[scan...][0m\' -f (&$v_f_unit $v_cS \'[38;5;214m\'), (&$v_f_unit $v_cA \'[38;5;39m\'), (&$v_fc $v_sn 1)) -NoNewline; ' ..
-        '} ' ..
-        '}; ' ..
-        '[Console]::CursorLeft = 0; $v_clr=\' \' * ([Console]::WindowWidth - 1); write-host $v_clr -NoNewline; [Console]::CursorLeft = 0; ' ..
-        '$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth - 50) 1); ' .. -- 使用 1 代替 $true
-        'write-host (\'{0} {1} {2}/\' -f (&$v_f_unit $v_cS \'[38;5;214m\'), (&$v_f_unit $v_cA \'[38;5;39m\'), (&$v_fc $v_sn 1)); ' ..
-        '} else { ' ..
-        '$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth - 50) 0); ' .. -- 使用 0 代替 $false
-        '$v_cS=$v_it.Length; $v_cA=[math]::Ceiling($v_it.Length/$v_z)*$v_z; ' ..
-        'write-host (\'{0} {1} {2}\' -f (&$v_f_unit $v_cS \'[38;5;214m\'), (&$v_f_unit $v_cA \'[38;5;39m\'), (&$v_fc $v_sn 0)); ' ..
-        '}; ' ..
-        '$v_sS+=$v_cS; $v_sA+=$v_cA; ' ..
-        '}; ' ..
-        'write-host (\'[38;5;242m\' + (\'-\' * 45) + \'[0m\'); ' ..
-        'write-host (\'Total Size:      \' + (&$v_f_unit $v_sS \'[38;5;214m\')); ' ..
-        'write-host (\'Total Allocated: \' + (&$v_f_unit $v_sA \'[38;5;39m\')); ' ..
-        'write-host (\'[38;5;242m(Based on \' + ($v_z/1KB) + \'KB cluster size)[0m\')"'
+-- 增强版的统计目录或文件磁盘空间使用情况的 du 命令
+-- Windows 没有直接等价的工具，使用 PowerShell 获取目录大小信息并格式化输出
+local du_cmd = 'powershell -NoLogo -NoProfile -Command "' ..
+    -- 1. 彩虹单位颜色映射函数
+    '$v_f_unit={param($v_n,$v_base_clr); ' ..
+    'if([math]::Round($v_n) -eq 0){ $v_s=\'0\'.PadRight(12); return \'[38;5;242m\'+$v_s+\'[0m\' }; ' ..
+    '$v_u=@(\'B\',\'KB\',\'MB\',\'GB\',\'TB\',\'PB\',\'EB\'); ' ..
+    '$v_uc=@(\'[38;5;196m\',\'[38;5;208m\',\'[38;5;220m\',\'[38;5;40m\',\'[38;5;39m\',\'[38;5;33m\',\'[38;5;135m\'); ' ..
+    '$v_x=0; while($v_n -ge 1024 -and $v_x -lt 6){$v_n/=1024; $v_x++}; ' ..
+    '$v_num=\'{0:N2}\' -f $v_n; $v_unit=\' {0}\' -f $v_u[$v_x]; ' ..
+    '$v_pad=\' \' * (12 - $v_num.Length - $v_unit.Length); ' ..
+    'return $v_base_clr + $v_num + \'[0m\' + $v_uc[$v_x] + $v_unit + \'[0m\' + $v_pad; ' ..
+    '}; ' ..
+    -- 2. 智慧语义截断函数 (保留后缀版，避开 $true/$false)
+    '$v_ft={param($v_s,$v_m,$v_is_d); ' ..
+    '$v_enc=[System.Text.Encoding]::GetEncoding(0); ' ..
+    'if($v_enc.GetByteCount($v_s) -le $v_m){return $v_s}; ' ..
+    'if($v_is_d -eq 1){ ' .. -- 使用 1 代替 $true
+    '$v_res=\'\'; $v_cur=0; foreach($v_ch in $v_s.ToCharArray()){$v_st=if([int]$v_ch -gt 255){2}else{1}; if($v_cur+$v_st+3 -gt $v_m){return $v_res+\'...\'}; $v_res+=$v_ch; $v_cur+=$v_st}; return $v_res; ' ..
+    '} else { ' ..           -- 档案采取 "主文件名...扩展名" 策略
+    '$v_ext=[System.IO.Path]::GetExtension($v_s); $v_base=[System.IO.Path]::GetFileNameWithoutExtension($v_s); ' ..
+    '$v_eLen=$v_enc.GetByteCount($v_ext); $v_bMax=$v_m - $v_eLen - 3; if($v_bMax -lt 3){$v_bMax=3}; ' ..
+    '$v_res=\'\'; $v_cur=0; foreach($v_ch in $v_base.ToCharArray()){$v_st=if([int]$v_ch -gt 255){2}else{1}; if($v_cur+$v_st -gt $v_bMax){return $v_res+\'...\'+$v_ext}; $v_res+=$v_ch; $v_cur+=$v_st}; return $v_res+$v_ext; ' ..
+    '} ' ..
+    '}; ' ..
+    -- 3. LS_COLORS & 图标渲染
+    '$v_lc=@{}; $env:LS_COLORS -split \':\' | ForEach-Object { $v_kv=$_.Split(\'=\'); if($v_kv.Length -eq 2){ $v_lc[$v_kv]=\'[\' + $v_kv + \'m\' } }; ' ..
+    '$v_fc={param($v_cn,$v_is_d); $v_rst=\'[0m\'; if($v_is_d -eq 1){ $v_clr=if($v_lc[\'di\']){$v_lc[\'di\']}else{\'[38;5;33m\'}; return $v_clr+\' \'+$v_cn+$v_rst }; ' ..
+    '$v_ex=[System.IO.Path]::GetExtension($v_cn).ToLower(); $v_clr=if($v_lc[\'*\'+$v_ex]){$v_lc[\'*\'+$v_ex]}else{\'[38;5;250m\'}; ' ..
+    'if($v_ex -match \'.exe|.bat|.cmd\'){ return \'[38;5;40m \'+$v_cn+$v_rst } ' ..
+    'elseif($v_ex -match \'.zip|.7z|.rar|.tar|.gz\'){ return \'[38;5;208m \'+$v_cn+$v_rst } ' ..
+    'elseif($v_ex -match \'.jpg|.png|.webp|.gif|.ico\'){ return \'[38;5;135m \'+$v_cn+$v_rst } ' ..
+    'elseif($v_ex -match \'.mp4|.mkv|.avi|.mp3|.wav\'){ return \'[38;5;161m \'+$v_cn+$v_rst } ' ..
+    'elseif($v_ex -match \'.txt|.md|.pdf|.doc\'){ return \'[38;5;253m \'+$v_cn+$v_rst } ' ..
+    'else { return $v_clr+\' \'+$v_cn+$v_rst }}; ' ..
+    -- 4. 侦测与主循环
+    '$v_rp=(Get-Item .).Root.Name; $v_z=(Get-CimInstance Win32_Volume -Filter \\"Name=\'$v_rp\'\\" 2>$null).BlockSize; if(!$v_z){$v_z=4096}; ' ..
+    '$v_sS=0; $v_sA=0; $v_cl=\' \' * 10; ' ..
+    'write-host (\'[38;5;220mSize         [38;5;39mAllocated    [38;5;253mName[0m\'); ' ..
+    'write-host (\'[38;5;242m------------ ------------ --------------------[0m\'); ' ..
+    'Get-ChildItem -Path \'.\\$*\' 2>$null | ForEach-Object { ' ..
+    '$v_it=$_; if($v_it.PSIsContainer){ ' ..
+    '$v_cS=0; $v_cA=0; $v_ct=0; ' ..
+    'Get-ChildItem $v_it.FullName -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { ' ..
+    '$v_l=$_.Length; $v_cS+=$v_l; $v_cA+=[math]::Ceiling($v_l/$v_z)*$v_z; ' ..
+    '$v_ct++; if($v_ct % 500 -eq 0){ ' ..
+    '$v_curW=[Console]::WindowWidth; if(!$v_curW){$v_curW=80}; $v_curM=$v_curW - 55; ' ..
+    '$v_sn=(&$v_ft $v_it.Name $v_curM 1); ' .. -- 使用 1 代替 $true
+    '[Console]::CursorLeft = 0; $v_clr=\' \' * ($v_curW - 1); write-host $v_clr -NoNewline; [Console]::CursorLeft = 0; ' ..
+    'write-host (\'{0} {1} {2} [38;5;242m[scan...][0m\' -f (&$v_f_unit $v_cS \'[38;5;214m\'), (&$v_f_unit $v_cA \'[38;5;39m\'), (&$v_fc $v_sn 1)) -NoNewline; ' ..
+    '} ' ..
+    '}; ' ..
+    '[Console]::CursorLeft = 0; $v_clr=\' \' * ([Console]::WindowWidth - 1); write-host $v_clr -NoNewline; [Console]::CursorLeft = 0; ' ..
+    '$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth - 50) 1); ' .. -- 使用 1 代替 $true
+    'write-host (\'{0} {1} {2}/\' -f (&$v_f_unit $v_cS \'[38;5;214m\'), (&$v_f_unit $v_cA \'[38;5;39m\'), (&$v_fc $v_sn 1)); ' ..
+    '} else { ' ..
+    '$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth - 50) 0); ' .. -- 使用 0 代替 $false
+    '$v_cS=$v_it.Length; $v_cA=[math]::Ceiling($v_it.Length/$v_z)*$v_z; ' ..
+    'write-host (\'{0} {1} {2}\' -f (&$v_f_unit $v_cS \'[38;5;214m\'), (&$v_f_unit $v_cA \'[38;5;39m\'), (&$v_fc $v_sn 0)); ' ..
+    '}; ' ..
+    '$v_sS+=$v_cS; $v_sA+=$v_cA; ' ..
+    '}; ' ..
+    'write-host (\'[38;5;242m\' + (\'-\' * 45) + \'[0m\'); ' ..
+    'write-host (\'Total Size:      \' + (&$v_f_unit $v_sS \'[38;5;214m\')); ' ..
+    'write-host (\'Total Allocated: \' + (&$v_f_unit $v_sA \'[38;5;39m\')); ' ..
+    'write-host (\'[38;5;242m(Based on \' + ($v_z/1KB) + \'KB cluster size)[0m\')"'
 
-    os.setalias('du', du_cmd)
-end
+os.setalias('du', du_cmd)
 
 if not command_exists("which") then
     os.setalias('which', 'where $*') -- 查找可执行文件位置
