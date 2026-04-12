@@ -340,29 +340,20 @@ if command_exists("free") then
 else
     -- Windows 没有直接等价的工具，使用 PowerShell 获取内存使用情况并格式化输出
     local free_cmd = 'powershell -NoLogo -NoProfile -Command "' ..
-        '$z=Get-CimInstance Win32_OperatingSystem; ' ..
-        '$m=Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory; ' ..
-        '$pf=Get-CimInstance Win32_PageFileUsage; ' ..
-        -- 数据换算 (KB -> GB)
-        '$u_tot=$z.TotalVisibleMemorySize/1mb; ' ..
-        '$u_fre=$z.FreePhysicalMemory/1mb; ' ..
-        '$u_cac=($m.CacheBytes+$m.StandbyCacheNormalPriorityBytes+$m.StandbyCacheReserveBytes+$m.StandbyCacheCoreBytes)/1gb; ' ..
-        '$u_av=$u_fre+($m.StandbyCacheNormalPriorityBytes+$m.StandbyCacheReserveBytes+$m.StandbyCacheCoreBytes)/1gb; ' ..
-        '$u_sh=$m.WriteCacheMessagesPerSec/1mb; ' ..
-        '$u_usd=$u_tot-$u_av; ' ..
-        -- Swap 与 Commit
-        '$s_tot=$pf.AllocatedBaseSize/1kb; ' ..
-        '$s_usd=$pf.CurrentUsage/1kb; ' ..
-        '$s_fre=$s_tot-$s_usd; ' ..
-        '$c_tot=$z.TotalVirtualMemorySize/1mb; ' ..
-        '$c_usd=($z.TotalVirtualMemorySize-$z.FreeVirtualMemory)/1mb; ' ..
-        -- 构建输出
+        '$f={param($n); if([math]::Round($n) -eq 0){return \'0\'}; $u=\'B\',\'KB\',\'MB\',\'GB\',\'TB\'; $i=0; while($n -ge 1024 -and $i -lt 4){$n/=1024; $i++}; \'{0:N2} {1}\' -f $n,$u[$i]}; ' ..
+        '$z=Get-CimInstance Win32_OperatingSystem; $m=Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory; $pf=Get-CimInstance Win32_PageFileUsage; ' ..
+        '$u_tot=$z.TotalVisibleMemorySize*1024; $u_fre=$z.FreePhysicalMemory*1024; ' ..
+        '$u_cac=$m.CacheBytes+$m.StandbyCacheNormalPriorityBytes+$m.StandbyCacheReserveBytes+$m.StandbyCacheCoreBytes; ' ..
+        '$u_av=$u_fre+$m.StandbyCacheNormalPriorityBytes+$m.StandbyCacheReserveBytes+$m.StandbyCacheCoreBytes; ' ..
+        '$u_sh=$m.WriteCacheMessagesPerSec*1024; $u_usd=$u_tot-$u_av; ' ..
+        '$s_tot=$pf.AllocatedBaseSize*1024*1024; $s_usd=$pf.CurrentUsage*1024*1024; ' ..
+        '$c_tot=$z.TotalVirtualMemorySize*1024; $c_usd=$c_tot-$z.FreeVirtualMemory*1024; ' ..
         '$r=@(); ' ..
-        '$f=\'{0:N2}GB\'; ' ..
-        '$r+=New-Object PSObject -Property @{Type=\'Mem:\';   total=$f -f $u_tot; used=$f -f $u_usd; free=$f -f $u_fre; shared=$f -f $u_sh; \'buff/cache\'=$f -f $u_cac; available=$f -f $u_av}; ' ..
-        '$r+=New-Object PSObject -Property @{Type=\'Swap:\';  total=$f -f $s_tot; used=$f -f $s_usd; free=$f -f $s_fre; shared=\'---\'; \'buff/cache\'=\'---\'; available=\'---\'}; ' ..
-        '$r+=New-Object PSObject -Property @{Type=\'Commit:\';total=$f -f $c_tot; used=$f -f $c_usd; free=$f -f ($c_tot-$c_usd); shared=\'---\'; \'buff/cache\'=\'---\'; available=\'---\'}; ' ..
-        '$r | Select-Object Type,total,used,free,shared,\'buff/cache\',available | Format-Table -AutoSize"'
+        '$r+=New-Object PSObject -Property @{Type=\'Mem:\';   total=(&$f $u_tot); used=(&$f $u_usd); free=(&$f $u_fre); shared=(&$f $u_sh); \'buff/cache\'=(&$f $u_cac); available=(&$f $u_av)}; ' ..
+        '$r+=New-Object PSObject -Property @{Type=\'Swap:\';  total=(&$f $s_tot); used=(&$f $s_usd); free=(&$f ($s_tot-$s_usd)); shared=\'---\'; \'buff/cache\'=\'---\'; available=\'---\'}; ' ..
+        '$r+=New-Object PSObject -Property @{Type=\'Commit:\';total=(&$f $c_tot); used=(&$f $c_usd); free=(&$f ($c_tot-$c_usd)); shared=\'---\'; \'buff/cache\'=\'---\'; available=\'---\'}; ' ..
+        '($r | Select-Object Type,total,used,free,shared,\'buff/cache\',available | Format-Table -AutoSize | Out-String).Trim()"'
+
     os.setalias('free', free_cmd)
 end
 
@@ -379,26 +370,72 @@ if command_exists("df") then
     os.setalias('df', 'df -h $*') -- 以易读的格式显示磁盘空间
 else
     -- Windows 没有直接等价的工具，使用 PowerShell 获取磁盘空间信息并格式化输出
-    os.setalias('df',
-        'powershell -NoLogo -NoProfile -command "Get-PSDrive -PSProvider FileSystem | ' ..
-        'Select-Object Name, ' ..
-        '@{Name=\'Used\';Expression={($_.Used/1GB).ToString(\'0.00\') + \' GB\'}}, ' ..
-        '@{Name=\'Free\';Expression={($_.Free/1GB).ToString(\'0.00\') + \' GB\'}}, ' ..
-        '@{Name=\'Used%\';Expression={if($_.Used -gt 0){ (\'{0:P2}\' -f ($_.Used / ($_.Used + $_.Free))) } else {\'0.00 %\'}}} | ' ..
-        'Format-Table -AutoSize"'
-    )
+    local df_cmd = 'powershell -NoLogo -NoProfile -Command "' ..
+        '$f={param($n); if([math]::Round($n) -eq 0){return \'0\'}; $unit=\'B\',\'KB\',\'MB\',\'GB\',\'TB\'; $x=0; while($n -ge 1024 -and $x -lt 4){$n/=1024; $x++}; \'{0:N2}{1}\' -f $n,$unit[$x]}; ' ..
+        '$vlist = Get-Volume; ' ..
+        '$rlist = Get-PSDrive -PSProvider FileSystem | ForEach-Object { ' ..
+        '$c=$_; $vol=$vlist | Where-Object { $_.DriveLetter -eq $c.Name }; ' ..
+        'if($vol){ $nm=if($vol.FileSystemLabel){$vol.FileSystemLabel} else {\'Volume\'}; $fs=$vol.FileSystem } ' ..
+        'else { $rt=if($c.DisplayRoot){$c.DisplayRoot.ToLower()} else {\'\'}; $nm=if($rt){$c.DisplayRoot} else {\'Remote\'}; ' ..
+        '$fs=if($rt -like \'\\\\*\'){\'SMB\'}elseif($rt -like \'http*\'){\'WebDAV\'}elseif($rt -like \'*sshfs*\'){\'SSHFS\'} else {\'Net\'} }; ' ..
+        'New-Object PSObject -Property @{ ' ..
+        'M = $c.Name + \':\'; ' ..
+        'Size = (&$f ($c.Used + $c.Free)); ' ..
+        'Used = (&$f $c.Used); ' ..
+        'Avail = (&$f $c.Free); ' ..
+        'P = $(if($c.Used -gt 0){ \'{0:P0}\' -f ($c.Used/($c.Used+$c.Free)) } else {\'0%\'}); ' ..
+        'Filesystem = \'{0}({1})\' -f $nm,$fs ' ..
+        '} ' ..
+        '}; ' ..
+        '($rlist | Sort-Object M | Select-Object @{N=\'Mounted\';E={$_.M}},Size,Used,Avail,@{N=\'Use%\';E={$_.P}},Filesystem | Format-Table -AutoSize | Out-String).Trim()"'
+
+    os.setalias('df', df_cmd)
 end
 
 if command_exists("du") then
     os.setalias('du', 'du -h -d1 $*') -- 显示当前目录下各文件夹大小
 else
     -- Windows 没有直接等价的工具，使用 PowerShell 获取目录大小信息并格式化输出
-    os.setalias('du',
-        'powershell -NoLogo -NoProfile -Command "Get-ChildItem -Path \'.\\$*\' -Directory | ' ..
-        'Select-Object Name, @{Name=\'Size\';Expression={ ' ..
-        '$size = (Get-ChildItem $_.FullName -Recurse -File | Measure-Object -Property Length -Sum).Sum; ' ..
-        'if($size){(\'{0:N2} GB\' -f ($size / 1GB))} else {\'0.00 GB\'} }} | Format-Table -AutoSize"'
-    )
+    local du_cmd = 'powershell -NoLogo -NoProfile -Command "' ..
+        '$v_f={param($v_n); if([math]::Round($v_n) -eq 0){return \'0\'}; $v_u=\'B\',\'KB\',\'MB\',\'GB\',\'TB\'; $v_i=0; while($v_n -ge 1024 -and $v_i -lt 4){$v_n/=1024; $v_i++}; \'{0:N2} {1}\' -f $v_n,$v_u[$v_i]}; ' ..
+        '$v_t={param($v_s,$v_m); $v_rs=\'\'; $v_cur=0; foreach($v_c in $v_s.ToCharArray()){$v_st=if([int]$v_c -gt 255){2}else{1}; if($v_cur+$v_st+3 -gt $v_m){return $v_rs+\'...\'}; $v_rs+=$v_c; $v_cur+=$v_st}; return $v_s}; ' ..
+        '$v_rt=(Get-Item .).Root.Name; $v_z=(Get-CimInstance Win32_Volume -Filter \\"Name=\'$v_rt\'\\" 2>$null).BlockSize; if(!$v_z){$v_z=4096}; ' ..
+        '$v_s_S=0; $v_s_A=0; ' ..
+        'write-host (\'{0,-12} {1,-12} {2}\' -f \'Size\',\'Allocated\',\'Name\'); ' ..
+        'write-host (\'{0,-12} {1,-12} {2}\' -f \'----\',\'---------\',\'----\'); ' ..
+        'Get-ChildItem -Path \'.\\$*\' 2>$null | ForEach-Object { ' ..
+        '$v_it=$_; if($v_it.PSIsContainer){ ' ..
+        '$v_cS=0; $v_cA=0; $v_ct=0; ' ..
+        'Get-ChildItem $v_it.FullName -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { ' ..
+        '$v_l=$_.Length; $v_cS+=$v_l; $v_cA+=[math]::Ceiling($v_l/$v_z)*$v_z; ' ..
+        '$v_ct++; if($v_ct % 500 -eq 0){ ' ..
+        -- 核心优化 1：留出更大的安全余量 (-50)，并主动获取当前宽度
+        '$v_currW=[Console]::WindowWidth; if(!$v_currW){$v_currW=80}; $v_currM=$v_currW - 50; ' ..
+        '$v_sn=(&$v_t $v_it.Name $v_currM); ' ..
+        '[Console]::CursorLeft = 0; ' ..
+        -- 核心优化 2：用足够长的空格在行首进行一次「隐形擦除」
+        '$v_clr=\' \' * ($v_currW - 1); write-host $v_clr -NoNewline; [Console]::CursorLeft = 0; ' ..
+        'write-host (\'{0,-12} {1,-12} {2} [scan...]\' -f (&$v_f $v_cS), (&$v_f $v_ca), $v_sn) -NoNewline; ' ..
+        '} ' ..
+        '}; ' ..
+        '$v_currW=[Console]::WindowWidth; if(!$v_currW){$v_currW=80}; $v_currM=$v_currW - 50; ' ..
+        '$v_sn=(&$v_t $v_it.Name $v_currM); [Console]::CursorLeft = 0; ' ..
+        '$v_clr=\' \' * ($v_currW - 1); write-host $v_clr -NoNewline; [Console]::CursorLeft = 0; ' ..
+        'write-host (\'{0,-12} {1,-12} {2}/\' -f (&$v_f $v_cS), (&$v_f $v_ca), $v_sn); ' ..
+        '} else { ' ..
+        '$v_currW=[Console]::WindowWidth; if(!$v_currW){$v_currW=80}; $v_currM=$v_currW - 50; ' ..
+        '$v_sn=(&$v_t $v_it.Name $v_currM); ' ..
+        '$v_cS=$v_it.Length; $v_cA=[math]::Ceiling($v_it.Length/$v_z)*$v_z; ' ..
+        'write-host (\'{0,-12} {1,-12} {2}\' -f (&$v_f $v_cS), (&$v_f $v_ca), $v_sn); ' ..
+        '}; ' ..
+        '$v_s_S+=$v_cS; $v_s_A+=$v_cA; ' ..
+        '}; ' ..
+        'write-host (\'-\' * 45); ' ..
+        'write-host (\'Total Size:      \' + (&$v_f $v_s_S)); ' ..
+        'write-host (\'Total Allocated: \' + (&$v_f $v_s_A)); ' ..
+        'write-host (\'(Based on \' + ($v_z/1KB) + \'KB cluster size)\')"'
+
+    os.setalias('du', du_cmd)
 end
 
 if not command_exists("which") then
