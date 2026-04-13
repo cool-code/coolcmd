@@ -334,60 +334,15 @@ os.setalias('killall',
 os.setalias('pkill',
     '@echo off $T set "_N_=" $T for %A in ($*) do set "_N_=%A" $T if defined _N_ taskkill /f /im %_N_%* $T set "_N_=" $T echo on')
 
--- free: 显示内存使用情况，这个是彩色增强版。
-local free_cmd = 'powershell -NoLogo -NoProfile -command "' ..
-    -- 1. 基础变量
-    '$v_rs=\'\27[0m\'; ' ..
-    '$v_u_list=\' B;KB;MB;GB;TB;PB;EB\'.Split(\';\'); ' ..
-    '$v_c_list=\'196;208;220;40;39;33;135\'.Split(\';\') | ForEach-Object { \'\27[38;5;\'+$_+\'m\' }; ' ..
-    -- 2. 核心格式化函数 (返回 12 位宽度的带颜色字串)
-    '$v_f = { param($v_val, $v_col); ' ..
-    'if($v_val -le 0){ return (\'\27[38;5;242m0\' + (\' \' * 11) + $v_rs) }; ' ..
-    '$v_idx=0; $v_num=[double]$v_val; ' ..
-    'while($v_num -ge 1024 -and $v_idx -lt 6){ $v_num /= 1024; $v_idx++ }; ' ..
-    '$v_dn=\'{0:N2}\' -f $v_num; $v_un=$v_u_list[$v_idx]; $v_uc=$v_c_list[$v_idx]; ' ..
-    '$v_txt=$v_dn + \' \' + $v_un; $v_pad=\' \' * (12 - $v_txt.Length); ' ..
-    'if($v_pad.Length -lt 0){$v_pad=\'\'}; ' ..
-    'return ($v_col + $v_dn + \' \' + $v_uc + $v_un + $v_rs + $v_pad) ' ..
-    '}; ' ..
-    -- 3. 获取数据
-    '$v_os=Get-CimInstance Win32_OperatingSystem; $v_mem=Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory; $v_pg=Get-CimInstance Win32_PageFileUsage; ' ..
-    '$v_tm=[double]$v_os.TotalVisibleMemorySize*1024; $v_fm=[double]$v_os.FreePhysicalMemory*1024; ' ..
-    '$v_std=[double]($v_mem.StandbyCacheNormalPriorityBytes + $v_mem.StandbyCacheReserveBytes + $v_mem.StandbyCacheCoreBytes); ' ..
-    '$v_ca=[double]$v_mem.CacheBytes + $v_std; $v_av=$v_fm + $v_std; $v_sh=[double]$v_mem.WriteCacheMessagesPerSec * 1024; $v_us=$v_tm - $v_av; ' ..
-    '$v_stt=([double]($v_pg | Measure-Object -Property AllocatedBaseSize -Sum).Sum) * 1024 * 1024; ' ..
-    '$v_stu=([double]($v_pg | Measure-Object -Property CurrentUsage -Sum).Sum) * 1024 * 1024; ' ..
-    '$v_ctt=[double]$v_os.TotalVirtualMemorySize * 1024; $v_ctu=$v_ctt - ([double]$v_os.FreeVirtualMemory * 1024); ' ..
-    -- 4. 建立彩虹表头颜色 (首列红色 196)
-    '$v_h1=\'\27[38;5;196mType       \'; $v_h2=\'\27[38;5;208mtotal        \'; $v_h3=\'\27[38;5;220mused         \'; $v_h4=\'\27[38;5;40mfree         \'; $v_h5=\'\27[38;5;39mshared       \'; $v_h6=\'\27[38;5;33mbuff/cache   \'; $v_h7=\'\27[38;5;135mavailable\' + $v_rs; ' ..
-    'write-host ($v_h1 + $v_h2 + $v_h3 + $v_h4 + $v_h5 + $v_h6 + $v_h7); ' ..
-    -- 5. 输出横线 (避开 * 运算符引发的报错)
-    'write-host (\'\27[38;5;242m---------- ------------ ------------ ------------ ------------ ------------ ------------\' + $v_rs); ' ..
-    -- 6. 输出彩色行 (首列红色)
-    '$v_s3=\'\27[38;5;242m---         \' + $v_rs; $v_sp=\' \'; $v_lbl=\'\27[38;5;196m\'; ' ..
-    'write-host ($v_lbl+\'Mem:       \') -NoNewline; write-host (&$v_f $v_tm (\'\27[38;5;208m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f $v_us (\'\27[38;5;220m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f $v_fm (\'\27[38;5;40m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f $v_sh (\'\27[38;5;39m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f $v_ca (\'\27[38;5;33m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f $v_av (\'\27[38;5;135m\')); ' ..
-    'write-host ($v_lbl+\'Swap:      \') -NoNewline; write-host (&$v_f $v_stt (\'\27[38;5;208m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f $v_stu (\'\27[38;5;220m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f ($v_stt-$v_stu) (\'\27[38;5;40m\')) -NoNewline; write-host $v_sp -NoNewline; write-host $v_s3 -NoNewline; write-host $v_sp -NoNewline; write-host $v_s3 -NoNewline; write-host $v_sp -NoNewline; write-host $v_s3; ' ..
-    'write-host ($v_lbl+\'Commit:    \') -NoNewline; write-host (&$v_f $v_ctt (\'\27[38;5;208m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f $v_ctu (\'\27[38;5;220m\')) -NoNewline; write-host $v_sp -NoNewline; write-host (&$v_f ($v_ctt-$v_ctu) (\'\27[38;5;40m\')) -NoNewline; write-host $v_sp -NoNewline; write-host $v_s3 -NoNewline; write-host $v_sp -NoNewline; write-host $v_s3 -NoNewline; write-host $v_sp -NoNewline; write-host $v_s3;"'
 
-os.setalias('free', free_cmd)
-
--- uptime: 显示系统已运行时间及开机时间
-os.setalias('uptime',
-    'powershell -NoLogo -NoProfile -Command "$o=Get-CimInstance Win32_OperatingSystem; ' ..
-    '$s=$o.LastBootUpTime; $u=(Get-Date)-$s; ' ..
-    'write-host \'Up time:    \' -NoNewline; \'{0} days, {1} hours, {2} minutes\' -f $u.Days, $u.Hours, $u.Minutes; ' ..
-    'write-host \'Boot time:  \' $s"'
-)
-
--- df: 显示磁盘空间使用情况，这个是彩色增强版。
-local df_cmd = 'powershell -NoLogo -NoProfile -command "' ..
-    -- 1. 初始化环境
+local ps_command_header = 'powershell -NoLogo -NoProfile -command "' ..
+    -- 初始化环境
     "$v_esc=[char]27;" ..
     "$v_rs=$v_esc+'[0m';" ..                                                                     --重置颜色
     "$v_u=' B;KB;MB;GB;TB;PB;EB'.Split(';');" ..                                                 -- 单位
     "$v_b=$v_esc+'[38;5;242m';" ..                                                               -- 灰色
     "$v_c='196;208;220;40;39;33;135'.Split(';') | ForEach-Object { $v_esc+'[38;5;'+$_+'m' };" .. -- 彩虹色
-    -- 2. 格式化函数
+    -- 格式化函数
     -- 数字转换为带颜色的字符串，单位自动转换为 B/KB/MB/GB/TB/PB/EB，并且根据使用的单位显示对应的颜色。
     -- 返回带颜色的 7 位数字 + 空格 + 单位
     -- 整体占 10 字符宽度，数字和单位都是右对齐（不足左侧补空格）
@@ -407,15 +362,54 @@ local df_cmd = 'powershell -NoLogo -NoProfile -command "' ..
     "$vuc=$v_c[$vi];" ..
     "return ($vc+$vdn+' '+$vuc+$vun)" ..
     "}; " ..
-    -- 3. PadCenter 函数：将文本居中并根据指定宽度进行左右补齐
+    -- PadCenter 函数：将文本居中并根据指定宽度进行左右补齐
     "$v_pcf={param($vt,$vw);" ..
     "if($vt.Length -ge $vw){ return $vt };" ..
     "$vp=$vw - $vt.Length;" ..
     "$vpl=[math]::Floor($vp/2);" ..
     "$vpr=[math]::Ceiling($vp/2);" ..
     "return (' ' * $vpl) + $vt + (' ' * $vpr)" ..
-    "};" ..
-    -- 4. 输出彩虹表头
+    "};"
+
+-- free: 显示内存使用情况，这个是彩色增强版。
+local free_cmd = ps_command_header ..
+    -- 获取数据
+    "$v_os=Get-CimInstance Win32_OperatingSystem;" ..
+    "$v_mem=Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory;" ..
+    "$v_pg=Get-CimInstance Win32_PageFileUsage;" ..
+    "$v_tm=[double]$v_os.TotalVisibleMemorySize*1024;" ..
+    "$v_fm=[double]$v_os.FreePhysicalMemory*1024;" ..
+    "$v_std=[double]($v_mem.StandbyCacheNormalPriorityBytes+$v_mem.StandbyCacheReserveBytes+$v_mem.StandbyCacheCoreBytes);" ..
+    "$v_ca=[double]$v_mem.CacheBytes+$v_std;" ..
+    "$v_av=$v_fm+$v_std;" ..
+    "$v_sh=[double]$v_mem.WriteCacheMessagesPerSec*1024;" ..
+    "$v_us=$v_tm-$v_av;" ..
+    "$v_stt=([double]($v_pg | Measure-Object -Property AllocatedBaseSize -Sum).Sum)*1024*1024;" ..
+    "$v_stu=([double]($v_pg | Measure-Object -Property CurrentUsage -Sum).Sum)*1024*1024;" ..
+    "$v_ctt=[double]$v_os.TotalVirtualMemorySize*1024;" ..
+    "$v_ctu=$v_ctt-([double]$v_os.FreeVirtualMemory*1024);" ..
+    -- 输出彩虹表头
+    "$v_h1=$v_c[0]+'  Type   ';" ..
+    "$v_h2=$v_c[1]+'   Total   ';" ..
+    "$v_h3=$v_c[2]+'   Used    ';" ..
+    "$v_h4=$v_c[3]+'   Free    ';" ..
+    "$v_h5=$v_c[4]+'  Shared   ';" ..
+    "$v_h6=$v_c[5]+'Buff/Cache ';" ..
+    "$v_h7=$v_c[6]+' Available' + $v_rs;" ..
+    "write-host ($v_h1+$v_h2+$v_h3+$v_h4+$v_h5+$v_h6+$v_h7);" ..
+    -- 输出横线 (避开 * 运算符引发的报错)
+    "write-host ($v_b+'-------- ---------- ---------- ---------- ---------- ---------- ----------'+$v_rs);" ..
+    -- 输出彩色行
+    "write-host ($v_c[0]+(&$v_pcf 'Mem' 8)+' '+(&$v_ff $v_tm $v_c[1])+' '+(&$v_ff $v_us $v_c[2])+' '+(&$v_ff $v_fm $v_c[3])+' '+(&$v_ff $v_sh $v_c[4])+' '+(&$v_ff $v_ca $v_c[5])+' '+(&$v_ff $v_av $v_c[6]));" ..
+    "write-host ($v_c[0]+(&$v_pcf 'Swap' 8)+' '+(&$v_ff $v_stt $v_c[1])+' '+(&$v_ff $v_stu $v_c[2])+' '+(&$v_ff ($v_stt-$v_stu) $v_c[3]));" ..
+    "write-host ($v_c[0]+(&$v_pcf 'Commit' 8)+' '+(&$v_ff $v_ctt $v_c[1])+' '+(&$v_ff $v_ctu $v_c[2])+' '+(&$v_ff ($v_ctt-$v_ctu) $v_c[3]));" ..
+    '"'
+
+os.setalias('free', free_cmd)
+
+-- df: 显示磁盘空间使用情况，这个是彩色增强版。
+local df_cmd = ps_command_header ..
+    -- 输出彩虹表头
     "$v_h1=$v_c[0]+'Drive ';" ..
     "$v_h2=$v_c[1]+'   Size    ';" ..
     "$v_h3=$v_c[2]+'   Used    ';" ..
@@ -424,11 +418,11 @@ local df_cmd = 'powershell -NoLogo -NoProfile -command "' ..
     "$v_h6=$v_c[5]+'FileSystem ';" ..
     "$v_h7=$v_c[6]+'Volume';" ..
     "write-host ($v_h1+$v_h2+$v_h3+$v_h4+$v_h5+$v_h6+$v_h7+$v_rs);" ..
-    -- 5. 分割线
+    -- 分割线
     "write-host ($v_b+'----- ---------- ---------- ---------- ---- ---------- ------'+$v_rs); " ..
-    -- 6. 获取数据
+    -- 获取数据
     "$v_vl=Get-Volume;" ..
-    -- 7. 主循环
+    -- 主循环
     "Get-PSDrive -PSProvider FileSystem | Sort-Object Name | ForEach-Object {" ..
     "$c=$_; $v_vo=$v_vl | Where-Object { $_.DriveLetter -eq $c.Name };" ..
     "if($v_vo){" ..
@@ -445,20 +439,20 @@ local df_cmd = 'powershell -NoLogo -NoProfile -command "' ..
     "$v_fs=if($v_rt -like 'http*'){'WebDAV'}elseif($v_rt -like '\\\\*'){'SMB'}else{'Net'};" ..
     -- 根据协议类型显示不同的颜色，Net、SMB、WebDAV 分别对应 红、橙、黄 三种颜色
     "$v_fsc=if($v_fs -eq 'WebDAV'){$v_c[2]}elseif($v_fs -eq 'SMB'){$v_c[1]}else{$v_c[0]};" ..
-    "}; " ..
-    "$v_tt=$c.Used+$c.Free; $v_up=if($v_tt -gt 0){$c.Used/$v_tt}else{0}; " ..
+    "};" ..
+    "$v_tt=$c.Used+$c.Free; $v_up=if($v_tt -gt 0){$c.Used/$v_tt}else{0};" ..
     -- 使用红色表示使用率大于 90%，使用橙色表示使用率大于 70%，否则使用绿色
-    "$v_uc=if($v_up -gt 0.9){$v_c[0]}elseif($v_up -gt 0.7){$v_c[1]}else{$v_c[3]}; " ..
-    "$v_pct=([math]::Round($v_up*100)).ToString().PadLeft(3) + '%'; " ..
+    "$v_uc=if($v_up -gt 0.9){$v_c[0]}elseif($v_up -gt 0.7){$v_c[1]}else{$v_c[3]};" ..
+    "$v_pct=([math]::Round($v_up*100)).ToString().PadLeft(3) + '%';" ..
     -- 物理补齐首列空格
     "$v_mt='  '+($c.Name + [char]58).PadRight(3);" ..
-    "write-host ($v_c[0] + $v_mt + $v_rs + ' ') -NoNewline; " ..
-    "write-host (&$v_ff $v_tt $v_c[1]) -NoNewline; write-host ' ' -NoNewline; " ..
-    "write-host (&$v_ff $c.Used $v_c[2]) -NoNewline; write-host ' ' -NoNewline; " ..
-    "write-host (&$v_ff $c.Free $v_c[3]) -NoNewline; write-host ' ' -NoNewline; " ..
-    "write-host ($v_uc + $v_pct + $v_rs + ' ') -NoNewline; " ..
-    "write-host ($v_fsc + (&$v_pcf $v_fs 10) + $v_rs + ' ') -NoNewline; " ..
-    "write-host ($v_nm + $v_rs); " ..
+    "write-host ($v_c[0] + $v_mt + $v_rs + ' ') -NoNewline;" ..
+    "write-host (&$v_ff $v_tt $v_c[1]) -NoNewline; write-host ' ' -NoNewline;" ..
+    "write-host (&$v_ff $c.Used $v_c[2]) -NoNewline; write-host ' ' -NoNewline;" ..
+    "write-host (&$v_ff $c.Free $v_c[3]) -NoNewline; write-host ' ' -NoNewline;" ..
+    "write-host ($v_uc + $v_pct + $v_rs + ' ') -NoNewline;" ..
+    "write-host ($v_fsc + (&$v_pcf $v_fs 10) + $v_rs + ' ') -NoNewline;" ..
+    "write-host ($v_nm + $v_rs);" ..
     '};"'
 
 os.setalias('df', df_cmd)
@@ -470,7 +464,7 @@ local du_cmd = 'powershell -NoLogo -NoProfile -Command "' ..
     -- 1. 彩虹单位颜色映射函数
     '$v_f_unit={param($v_n,$v_base_clr); ' ..
     'if([math]::Round($v_n) -eq 0){ $v_s=\'0\'.PadRight(12); return \'\27[38;5;242m\'+$v_s+\'\27[0m\' }; ' ..
-    '$v_u=@(\'B\',\'KB\',\'MB\',\'GB\',\'TB\',\'PB\',\'EB\'); ' ..
+    '$v_u=\' B;KB;MB;GB;TB;PB;EB\'.Split(\';\'); ' ..
     '$v_uc=@(\'\27[38;5;196m\',\'\27[38;5;208m\',\'\27[38;5;220m\',\'\27[38;5;40m\',\'\27[38;5;39m\',\'\27[38;5;33m\',\'\27[38;5;135m\'); ' ..
     '$v_x=0; while($v_n -ge 1024 -and $v_x -lt 6){$v_n/=1024; $v_x++}; ' ..
     '$v_num=\'{0:N2}\' -f $v_n; $v_unit=\' {0}\' -f $v_u[$v_x]; ' ..
@@ -532,6 +526,14 @@ local du_cmd = 'powershell -NoLogo -NoProfile -Command "' ..
     'write-host (\'\27[38;5;242m(Based on \' + ($v_z/1KB) + \'KB cluster size)\27[0m\')"'
 
 os.setalias('du', du_cmd)
+
+-- uptime: 显示系统已运行时间及开机时间
+os.setalias('uptime',
+    'powershell -NoLogo -NoProfile -Command "$o=Get-CimInstance Win32_OperatingSystem; ' ..
+    '$s=$o.LastBootUpTime; $u=(Get-Date)-$s; ' ..
+    'write-host \'Up time:    \' -NoNewline; \'{0} days, {1} hours, {2} minutes\' -f $u.Days, $u.Hours, $u.Minutes; ' ..
+    'write-host \'Boot time:  \' $s"'
+)
 
 if not command_exists("which") then
     os.setalias('which', 'where $*') -- 查找可执行文件位置
