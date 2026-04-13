@@ -382,45 +382,84 @@ os.setalias('uptime',
 -- df: 显示磁盘空间使用情况，这个是彩色增强版。
 local df_cmd = 'powershell -NoLogo -NoProfile -command "' ..
     -- 1. 初始化环境
-    '$v_rs=\'\27[0m\'; ' ..
-    '$v_u_list=\'B;KB;MB;GB;TB;PB;EB\'.Split(\';\'); ' ..
-    '$v_c_list=\'196;208;220;40;39;33;135\'.Split(\';\') | ForEach-Object { \'\27[38;5;\'+$_+\'m\' }; ' ..
+    "$v_esc=[char]27;" ..
+    "$v_rs=$v_esc+'[0m';" ..                                                                     --重置颜色
+    "$v_u=' B;KB;MB;GB;TB;PB;EB'.Split(';');" ..                                                 -- 单位
+    "$v_b=$v_esc+'[38;5;242m';" ..                                                               -- 灰色
+    "$v_c='196;208;220;40;39;33;135'.Split(';') | ForEach-Object { $v_esc+'[38;5;'+$_+'m' };" .. -- 彩虹色
     -- 2. 格式化函数
-    '$v_ff = { param($v_val, $v_col); ' ..
-    'if($v_val -le 0){ return (\'\27[38;5;242m0           \' + $v_rs) }; ' ..
-    '$v_idx=0; $v_num=[double]$v_val; ' ..
-    'while($v_num -ge 1024 -and $v_idx -lt 6){ $v_num /= 1024; $v_idx++ }; ' ..
-    '$v_dn=\'{0:N2}\' -f $v_num; $v_un=$v_u_list[$v_idx]; $v_uc=$v_c_list[$v_idx]; ' ..
-    '$v_txt=$v_dn + \' \' + $v_un; $v_pad=\' \' * (10 - $v_txt.Length); ' ..
-    'if($v_pad.Length -lt 0){$v_pad=\'\'}; ' ..
-    'return ($v_rs + $v_pad + $v_col + $v_dn + \' \' + $v_uc + $v_un) ' ..
-    '}; ' ..
-    -- 3. 获取数据
-    '$v_vl = Get-Volume; $v_sp=\' \'; $v_lbl=\'\27[38;5;196m\'; ' ..
+    -- 数字转换为带颜色的字符串，单位自动转换为 B/KB/MB/GB/TB/PB/EB，并且根据使用的单位显示对应的颜色。
+    -- 返回带颜色的 7 位数字 + 空格 + 单位
+    -- 整体占 10 字符宽度，数字和单位都是右对齐（不足左侧补空格）
+    -- 如果值为 0 或负数，直接返回 "      0  B"（6 个空格 + 1 个数字 + 2 个空格 + 1 个单位），并使用灰色显示
+    "$v_ff={param($vv,$vc);" ..
+    "if($vv -le 0){" ..
+    "return($v_b+'      0  B'+$v_rs)" ..
+    "};" ..
+    "$vi=0;" ..
+    "$vn=[double]$vv;" ..
+    "while($vn -ge 1024 -and $vi -lt 6){" ..
+    "$vn/=1024;" ..
+    "$vi++" ..
+    "};" ..
+    "$vdn=('{0:N2}' -f $vn).PadLeft(7);" ..
+    "$vun=$v_u[$vi];" ..
+    "$vuc=$v_c[$vi];" ..
+    "return ($vc+$vdn+' '+$vuc+$vun)" ..
+    "}; " ..
+    -- 3. PadCenter 函数：将文本居中并根据指定宽度进行左右补齐
+    "$v_pcf={param($vt,$vw);" ..
+    "if($vt.Length -ge $vw){ return $vt };" ..
+    "$vp=$vw - $vt.Length;" ..
+    "$vpl=[math]::Floor($vp/2);" ..
+    "$vpr=[math]::Ceiling($vp/2);" ..
+    "return (' ' * $vpl) + $vt + (' ' * $vpr)" ..
+    "};" ..
     -- 4. 输出彩虹表头
-    '$v_h1=\'\27[38;5;196mMounted \'; $v_h2=\'\27[38;5;208m   total   \'; $v_h3=\'\27[38;5;220m   used    \'; $v_h4=\'\27[38;5;40m   avail   \'; $v_h5=\'\27[38;5;39mUse% \'; $v_h6=\'\27[38;5;33mFilesystem\' + $v_rs; ' ..
-    'write-host ($v_h1 + $v_h2 + $v_h3 + $v_h4 + $v_h5 + $v_h6); ' ..
+    "$v_h1=$v_c[0]+'Drive ';" ..
+    "$v_h2=$v_c[1]+'   Size    ';" ..
+    "$v_h3=$v_c[2]+'   Used    ';" ..
+    "$v_h4=$v_c[3]+'   Avail   ';" ..
+    "$v_h5=$v_c[4]+'Use% ';" ..
+    "$v_h6=$v_c[5]+'FileSystem ';" ..
+    "$v_h7=$v_c[6]+'Volume';" ..
+    "write-host ($v_h1+$v_h2+$v_h3+$v_h4+$v_h5+$v_h6+$v_h7+$v_rs);" ..
     -- 5. 分割线
-    'write-host (\'\27[38;5;242m------- ---------- ---------- ---------- ---- ----------\' + $v_rs); ' ..
-    -- 6. 主循环
-    'Get-PSDrive -PSProvider FileSystem | ForEach-Object { ' ..
-    '$c=$_; $v_vo=$v_vl | Where-Object { $_.DriveLetter -eq $c.Name }; ' ..
-    'if($v_vo){ $v_nm=if($v_vo.FileSystemLabel){$v_vo.FileSystemLabel}else{\'Volume\'}; $v_fs=$v_vo.FileSystem; $v_fsc=\'\27[38;5;135m\' } ' ..
-    'else { $v_rt=if($c.DisplayRoot){$c.DisplayRoot.ToLower()}else{\'\'}; $v_nm=if($v_rt){$c.DisplayRoot}else{\'Remote\'}; ' ..
-    '$v_fs=if($v_rt -like \'\\\\*\'){\'SMB\'}elseif($v_rt -like \'http*\'){\'WebDAV\'}else{\'Net\'}; $v_fsc=\'\27[38;5;208m\' }; ' ..
-    '$v_tt=$c.Used+$c.Free; $v_up=if($v_tt -gt 0){$c.Used/$v_tt}else{0}; ' ..
-    '$v_uc=if($v_up -gt 0.9){\'\27[38;5;196m\'}elseif($v_up -gt 0.7){\'\27[38;5;214m\'}else{\'\27[38;5;40m\'}; ' ..
-    '$v_pct=([math]::Round($v_up*100)).ToString().PadLeft(3) + \'%\'; ' ..
+    "write-host ($v_b+'----- ---------- ---------- ---------- ---- ---------- ------'+$v_rs); " ..
+    -- 6. 获取数据
+    "$v_vl=Get-Volume;" ..
+    -- 7. 主循环
+    "Get-PSDrive -PSProvider FileSystem | Sort-Object Name | ForEach-Object {" ..
+    "$c=$_; $v_vo=$v_vl | Where-Object { $_.DriveLetter -eq $c.Name };" ..
+    "if($v_vo){" ..
+    -- 本地卷显示卷标和文件系统类型
+    "$v_nm=if($v_vo.FileSystemLabel){$v_c[6]+$v_vo.FileSystemLabel}else{$v_b+'(Local Disk)'};" ..
+    "$v_fst=if($v_vo.FileSystem){$v_vo.FileSystem.ToLower()}else{''};" ..
+    "$v_fs=$v_vo.FileSystem;" ..
+    -- 根据文件系统类型显示不同的颜色，NTFS、FAT、exFAT、ReFS 分别对应 绿、青、蓝、紫 四种颜色，未知文件系统使用灰色
+    "$v_fsc=if($v_fst -eq 'ntfs'){$v_c[3]}elseif($v_fst -like 'fat*'){$v_c[4]}elseif($v_fst -eq 'exfat'){$v_c[5]}elseif($v_fst -eq 'refs'){$v_c[6]}else{$v_b};" ..
+    "}else{" ..
+    "$v_rt=if($c.DisplayRoot){$c.DisplayRoot.ToLower()}else{''};" ..
+    -- 远程卷显示共享名称和协议类型，协议类型通过 DisplayRoot 的前缀判断（SMB、WebDAV、Net）
+    "$v_nm=if($v_rt){$v_c[6]+$c.DisplayRoot}else{$v_b+'(Remote Disk)'};" ..
+    "$v_fs=if($v_rt -like 'http*'){'WebDAV'}elseif($v_rt -like '\\\\*'){'SMB'}else{'Net'};" ..
+    -- 根据协议类型显示不同的颜色，Net、SMB、WebDAV 分别对应 红、橙、黄 三种颜色
+    "$v_fsc=if($v_fs -eq 'WebDAV'){$v_c[2]}elseif($v_fs -eq 'SMB'){$v_c[1]}else{$v_c[0]};" ..
+    "}; " ..
+    "$v_tt=$c.Used+$c.Free; $v_up=if($v_tt -gt 0){$c.Used/$v_tt}else{0}; " ..
+    -- 使用红色表示使用率大于 90%，使用橙色表示使用率大于 70%，否则使用绿色
+    "$v_uc=if($v_up -gt 0.9){$v_c[0]}elseif($v_up -gt 0.7){$v_c[1]}else{$v_c[3]}; " ..
+    "$v_pct=([math]::Round($v_up*100)).ToString().PadLeft(3) + '%'; " ..
     -- 物理补齐首列空格
-    '$v_mt=$c.Name + [char]58; $v_mp=\' \' * (6 - $v_mt.Length); ' ..
-    'write-host ($v_rs + $v_sp + $v_lbl + $v_mt + $v_rs + $v_mp + $v_sp) -NoNewline; ' ..
-    'write-host (&$v_ff $v_tt (\'\27[38;5;208m\')) -NoNewline; write-host $v_sp -NoNewline; ' ..
-    'write-host (&$v_ff $c.Used (\'\27[38;5;220m\')) -NoNewline; write-host $v_sp -NoNewline; ' ..
-    'write-host (&$v_ff $c.Free (\'\27[38;5;40m\')) -NoNewline; write-host $v_sp -NoNewline; ' ..
-    'write-host ($v_uc + $v_pct + $v_rs + $v_sp) -NoNewline; ' ..
-    -- 卷标与路径上色 (蓝色 33) + 协议上色 (紫色 135)
-    'write-host (\'\27[38;5;33m\' + $v_nm + $v_rs + [char]32 + [char]40 + $v_fsc + $v_fs + $v_rs + [char]41); ' ..
-    '} | Sort-Object Mounted;"'
+    "$v_mt='  '+($c.Name + [char]58).PadRight(3);" ..
+    "write-host ($v_c[0] + $v_mt + $v_rs + ' ') -NoNewline; " ..
+    "write-host (&$v_ff $v_tt $v_c[1]) -NoNewline; write-host ' ' -NoNewline; " ..
+    "write-host (&$v_ff $c.Used $v_c[2]) -NoNewline; write-host ' ' -NoNewline; " ..
+    "write-host (&$v_ff $c.Free $v_c[3]) -NoNewline; write-host ' ' -NoNewline; " ..
+    "write-host ($v_uc + $v_pct + $v_rs + ' ') -NoNewline; " ..
+    "write-host ($v_fsc + (&$v_pcf $v_fs 10) + $v_rs + ' ') -NoNewline; " ..
+    "write-host ($v_nm + $v_rs); " ..
+    '};"'
 
 os.setalias('df', df_cmd)
 
