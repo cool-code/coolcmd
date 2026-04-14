@@ -58,6 +58,15 @@ if exist "!CLINK_CONFIG_DIR!\LS_COLORS" (
     exit /b 1
 )
 
+echo [*] Fetching configuration files from the cloud...
+curl -fsSL "%BASE_URL%/cool-code/coolcmd/refs/heads/master/LS_ICONS" -o "!CLINK_CONFIG_DIR!\LS_ICONS"
+if exist "!CLINK_CONFIG_DIR!\LS_ICONS" (
+    echo [OK] LS_ICONS synchronized.
+) else (
+    echo [Error] Failed to fetch LS_ICONS. Please check your internet connection and try again.
+    exit /b 1
+)
+
 curl -fsSL "%BASE_URL%/cool-code/coolcmd/refs/heads/master/coolcmd.lua" -o "!CLINK_CONFIG_DIR!\coolcmd.lua"
 if exist "!CLINK_CONFIG_DIR!\coolcmd.lua" (
     echo [OK] coolcmd.lua synchronized.
@@ -68,6 +77,7 @@ if exist "!CLINK_CONFIG_DIR!\coolcmd.lua" (
 
 :: 4. Clear old cache files
 if exist "!CLINK_CONFIG_DIR!\LS_COLORS_FULL_CACHE" del /Q "!CLINK_CONFIG_DIR!\LS_COLORS_FULL_CACHE"
+if exist "!CLINK_CONFIG_DIR!\LS_ICONS_FULL_CACHE" del /Q "!CLINK_CONFIG_DIR!\LS_ICONS_FULL_CACHE"
 if exist "!CLINK_CONFIG_DIR!\COOL_TOOLS_CACHE.lua" del /Q "!CLINK_CONFIG_DIR!\COOL_TOOLS_CACHE.lua"
 
 :: 5. Install additional tools (Coreutils, LSD, Bat, Ripgrep, btop, Procs, Oh-My-Posh) and fonts (Meslo Nerd Font)

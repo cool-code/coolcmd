@@ -26,8 +26,8 @@ if not os.isfile(lang_env_file) then
     end
 end
 
--- ====================== LS_COLORS CONFIGURATION =============================
--- 设置 LS_COLORS 的字符长度上限
+-- ====================== LS_COLORS & LS_ICONS CONFIGURATION =============================
+-- 设置 LS_COLORS 和 LS_ICONS 的字符长度上限
 -- 8191: CMD 命令行参数的理论极限，cmd 的 echo %LS_COLORS% 还能勉强工作。
 -- 32767: Windows 进程环境变量的理论极限（lsd 能读到，但 echo 会崩溃）。
 -- 用户可以随时修改这个值，重启 CMD 立即生效。
@@ -38,15 +38,37 @@ end
 --      地保留颜色配置让大部分工具（包括 lsd, rg）能正常工作，同时给其它环境变
 --      量留够空间。但缺点是用 echo %LS_COLORS% 来查看时看不到内容。如果用户需
 --      要在 echo 或 set 中看到这个环境变量的值，请将它设置为 8191 或更小。
+--      LS_ICONS 的默认值 4096 是基于目前的配置文件内容长度预估的，通常不会超过
+--这个长度。
 local LS_COLORS_MAX_LENGTH = 16383
+local LS_ICONS_MAX_LENGTH = 4096
 -- ============================================================================
 
-local raw_file = clink_path .. "LS_COLORS"
-local cache_file = clink_path .. "LS_COLORS_FULL_CACHE" -- 缓存完整解析结果
+local function set_ls_env(env_name, max_length, full_str)
+    if full_str and full_str ~= "" then
+        local final_str = full_str
+        -- 动态截断：根据用户当前的配置值进行截断
+        if #final_str > max_length then
+            local truncated = final_str:sub(1, max_length)
+            local last_colon = truncated:match(".*():")
+            if last_colon then
+                final_str = truncated:sub(1, last_colon - 1)
+            end
+        end
+
+        final_str = final_str:gsub(":$", "")
+        os.setenv(env_name, final_str)
+    end
+end
+
+-- ============================================================================
+
+local ls_colors_raw_file = clink_path .. "LS_COLORS"
+local ls_colors_cache_file = clink_path .. "LS_COLORS_FULL_CACHE" -- 缓存完整解析结果
 
 local function get_ls_colors_data()
     -- 1. 尝试读取完整解析后的缓存
-    local f_cache = io.open(cache_file, "r")
+    local f_cache = io.open(ls_colors_cache_file, "r")
     if f_cache then
         local cached_data = f_cache:read("*all")
         f_cache:close()
@@ -54,7 +76,7 @@ local function get_ls_colors_data()
     end
 
     -- 2. 如果没有缓存，解析 trapd00r 的原始文件
-    local f_raw = io.open(raw_file, "r")
+    local f_raw = io.open(ls_colors_raw_file, "r")
     if not f_raw then return nil end
 
     local entries = {}
@@ -98,7 +120,7 @@ local function get_ls_colors_data()
     local full_result = table.concat(entries, ":")
 
     -- 3. 将最全的解析结果存入缓存
-    local f_save = io.open(cache_file, "w")
+    local f_save = io.open(ls_colors_cache_file, "w")
     if f_save then
         f_save:write(full_result)
         f_save:close()
@@ -108,21 +130,61 @@ local function get_ls_colors_data()
 end
 
 -- 4. 执行加载与动态截断
-local full_str = get_ls_colors_data()
-if full_str and full_str ~= "" then
-    local final_str = full_str
-    -- 动态截断：根据用户当前的配置值进行截断
-    if #final_str > LS_COLORS_MAX_LENGTH then
-        local truncated = final_str:sub(1, LS_COLORS_MAX_LENGTH)
-        local last_colon = truncated:match(".*():")
-        if last_colon then
-            final_str = truncated:sub(1, last_colon - 1)
-        end
+
+set_ls_env("LS_COLORS", LS_COLORS_MAX_LENGTH, get_ls_colors_data())
+
+-- ============================================================================
+
+local ls_icons_raw_file = clink_path .. "LS_ICONS"
+local ls_icons_cache_file = clink_path .. "LS_ICONS_FULL_CACHE" -- 缓存完整解析结果
+
+local function get_ls_icons_data()
+    -- 1. 尝试读取完整解析后的缓存
+    local f_cache = io.open(ls_icons_cache_file, "r")
+    if f_cache then
+        local cached_data = f_cache:read("*all")
+        f_cache:close()
+        if cached_data and cached_data ~= "" then return cached_data end
     end
 
-    final_str = final_str:gsub(":$", "")
-    os.setenv("LS_COLORS", final_str)
+    -- 2. 如果没有缓存，解析 LS_ICONS 的原始文件
+    local f_raw = io.open(ls_icons_raw_file, "r")
+    if not f_raw then return nil end
+
+    local entries = {}
+    local translate = {
+        dir = "di",
+        file = "fi",
+    }
+
+    for line in f_raw:lines() do
+        line = line:gsub("#.*$", "")
+        local key, icon = line:match("^%s*(%S+):%s*(%S+)")
+        if key and icon then
+            if translate[key] then
+                table.insert(entries, translate[key] .. "=" .. icon)
+            else
+                key = "*." .. key
+                table.insert(entries, key .. "=" .. icon)
+            end
+        end
+    end
+    f_raw:close()
+
+    local full_result = table.concat(entries, ":")
+
+    -- 3. 将最全的解析结果存入缓存
+    local f_save = io.open(ls_icons_cache_file, "w")
+    if f_save then
+        f_save:write(full_result)
+        f_save:close()
+    end
+
+    return full_result
 end
+
+-- 4. 执行加载与动态截断
+set_ls_env("LS_ICONS", LS_ICONS_MAX_LENGTH, get_ls_icons_data())
 
 -- ====================== TOOL DETECTION WITH CACHE ===========================
 local tool_cache_file = clink_path .. "COOL_TOOLS_CACHE.lua"
@@ -485,15 +547,21 @@ local du_cmd = ps_command_header ..
     "}" ..
     "};" ..
     -- 3. LS_COLORS & 图标渲染
-    "$v_lc=@{};$env:LS_COLORS -split ':' | ForEach-Object { $v_kv=$_.Split('='); if($v_kv.Length -eq 2){$v_lc[$v_kv]=$v_esc+'['+$v_kv+'m'}};" ..
-    "$v_fc={param($v_cn,$v_is_d); if($v_is_d -eq 1){$v_clr=if($v_lc['di']){$v_lc['di']}else{$v_c[5]};return $v_clr+' '+$v_cn+$v_rs};" ..
-    "$v_ex=[System.IO.Path]::GetExtension($v_cn).ToLower();$v_clr=if($v_lc['*'+$v_ex]){$v_lc['*'+$v_ex]}else{$v_c[8]}; " ..
-    "if($v_ex -match '.exe|.bat|.cmd'){ return $v_c[3]+' '+$v_cn+$v_rs } " ..
-    "elseif($v_ex -match '.zip|.7z|.rar|.tar|.gz'){ return $v_c[1]+' '+$v_cn+$v_rs } " ..
-    "elseif($v_ex -match '.jpg|.png|.webp|.gif|.ico'){ return $v_c[6]+' '+$v_cn+$v_rs } " ..
-    "elseif($v_ex -match '.mp4|.mkv|.avi|.mp3|.wav'){ return $v_c[2]+' '+$v_cn+$v_rs } " ..
-    "elseif($v_ex -match '.txt|.md|.pdf|.doc'){ return $v_c[9]+' '+$v_cn+$v_rs } " ..
-    "else { return $v_clr+' '+$v_cn+$v_rs }}; " ..
+    "$v_lc=@{}; $v_li=@{};" ..
+    "$env:LS_COLORS -split ':'|ForEach-Object{$v_kv=$_.Split('=');if($v_kv.Length -eq 2){$v_lc[$v_kv[0]]=$v_esc+'['+$v_kv[1]+'m'}};" ..
+    "$env:LS_ICONS -split ':'|ForEach-Object{$v_kv=$_.Split('=');if($v_kv.Length -eq 2){$v_li[$v_kv[0]]=$v_kv[1]}};" ..
+    "$v_fc={param($v_cn,$v_is_d);" ..
+    "$vc=$v_c[8];$vi=' ';" ..
+    "if($v_is_d -eq 1){" ..
+    "$vc=if($v_lc['di']){$v_lc['di']}else{$v_c[5]};" ..
+    "$vi=if($v_li['di']){$v_li['di']+' '}else{' '};" ..
+    "}else{" ..
+    "$vk='*'+[System.IO.Path]::GetExtension($v_cn).ToLower();" ..
+    "$vc=if($v_lc[$vk]){$v_lc[$vk]}elseif($v_lc['fi']){$v_lc['fi']};" ..
+    "$vi=if($v_li[$vk]){$v_li[$vk]+' '}elseif($v_li['fi']){$v_li['fi']+' '};" ..
+    "};" ..
+    "return $vc+$vi+$v_cn+$v_rs" ..
+    "};" ..
     -- 4. 侦测与主循环
     "$v_rp=(Get-Item .).Root.Name; $v_z=(Get-CimInstance -ClassName Win32_Volume | Where-Object { $_.Name -eq $v_rp }).BlockSize; if(!$v_z){$v_z=4096};" ..
     "$v_sS=0; $v_sA=0; $v_cl=' ' * 10;" ..
