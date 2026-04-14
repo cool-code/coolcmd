@@ -562,37 +562,43 @@ local du_cmd = ps_command_header ..
     "};" ..
     "return $vc+$vi+$v_cn+$v_rs" ..
     "};" ..
+    "$v_fcl={" ..
+    "[Console]::CursorLeft=0;" ..
+    "write-host (' '*([Console]::WindowWidth-1)) -NoNewline;" ..
+    "[Console]::CursorLeft=0;" ..
+    "};" ..
     -- 4. 侦测与主循环
-    "$v_rp=(Get-Item .).Root.Name; $v_z=(Get-CimInstance -ClassName Win32_Volume | Where-Object { $_.Name -eq $v_rp }).BlockSize; if(!$v_z){$v_z=4096};" ..
-    "$v_sS=0; $v_sA=0; $v_cl=' ' * 10;" ..
+    "$v_rp=(Get-Item .).Root.Name;" ..
+    "$v_z=(Get-CimInstance -ClassName Win32_Volume|Where-Object{$_.Name -eq $v_rp}).BlockSize;" ..
+    "if(!$v_z){$v_z=4096};" ..
+    "$v_sS=0;$v_sA=0;$v_cl=' '*10;" ..
     "write-host ($v_c[1]+'   Size    '+$v_c[4]+' Allocated '+$v_c[5]+'   Name'+$v_rs);" ..
     "write-host ($v_c[7]+'---------- ---------- -----------------------'+$v_rs);" ..
-    "Get-ChildItem -Path '.\\$*' 2>$null | ForEach-Object {" ..
-    "$v_it=$_; if($v_it.PSIsContainer){" ..
-    "$v_cS=0; $v_cA=0; $v_ct=0;" ..
-    "Get-ChildItem $v_it.FullName -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {" ..
-    "$v_l=$_.Length; $v_cS+=$v_l; $v_cA+=[math]::Ceiling($v_l/$v_z)*$v_z;" ..
-    "$v_ct++; if($v_ct % 500 -eq 0){" ..
-    "$v_curW=[Console]::WindowWidth; if(!$v_curW){$v_curW=80}; $v_curM=$v_curW - 36;" ..
-    "$v_sn=(&$v_ft $v_it.Name $v_curM 1);" .. -- 使用 1 代替 $true
-    "[Console]::CursorLeft = 0; $v_clr=' ' * ($v_curW - 1); write-host $v_clr -NoNewline; [Console]::CursorLeft = 0;" ..
+    "Get-ChildItem -Path '.\\$*' 2>$null|ForEach-Object{" ..
+    "$v_it=$_;if($v_it.PSIsContainer){" ..
+    "$v_cS=0;$v_cA=0;$v_ct=0;" ..
+    "Get-ChildItem $v_it.FullName -Recurse -File -ErrorAction SilentlyContinue|ForEach-Object{" ..
+    "$v_l=$_.Length;$v_cS+=$v_l;$v_cA+=[math]::Ceiling($v_l/$v_z)*$v_z;" ..
+    "$v_ct++;if($v_ct % 500 -eq 0){" ..
+    "$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth-49) 1);" .. -- 使用 1 代替 $true
+    "&$v_fcl;" ..
     "write-host ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[4])+' '+(&$v_fc $v_sn 1)+' [scan...]') -NoNewline;" ..
     "}" ..
     "};" ..
-    "[Console]::CursorLeft = 0; $v_clr=' ' * ([Console]::WindowWidth - 1); write-host $v_clr -NoNewline; [Console]::CursorLeft = 0;" ..
-    "$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth - 27) 1);" .. -- 使用 1 代替 $true
+    "&$v_fcl;" ..
+    "$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth-40) 1);" .. -- 使用 1 代替 $true
     "write-host ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[4])+' '+(&$v_fc $v_sn 1));" ..
     "}else{ " ..
-    "$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth - 27) 0);" .. -- 使用 0 代替 $false
+    "$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth-40) 0);" .. -- 使用 0 代替 $false
     "$v_cS=$v_it.Length; $v_cA=[math]::Ceiling($v_it.Length/$v_z)*$v_z;" ..
     "write-host ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[4])+' '+(&$v_fc $v_sn 0));" ..
     "};" ..
-    "$v_sS+=$v_cS; $v_sA+=$v_cA; " ..
+    "$v_sS+=$v_cS;$v_sA+=$v_cA;" ..
     "};" ..
-    "write-host ($v_c[7]+('-' * 45)+$v_rs);" ..
-    "write-host ($v_c[1]+'Total Size:      '+ (&$v_ff $v_sS $v_c[1])); " ..
-    "write-host ($v_c[4]+'Total Allocated: '+ (&$v_ff $v_sA $v_c[4])); " ..
-    "write-host ($v_c[7]+'(Based on ' + ($v_z/1KB) + 'KB cluster size)'+$v_rs)" .. '"'
+    "write-host ($v_c[7]+('-'*45)+$v_rs);" ..
+    "write-host ($v_c[1]+'Total Size:      '+(&$v_ff $v_sS $v_c[1]));" ..
+    "write-host ($v_c[4]+'Total Allocated: '+(&$v_ff $v_sA $v_c[4]));" ..
+    "write-host ($v_c[7]+'(Based on '+($v_z/1KB)+'KB cluster size)'+$v_rs)" .. '"'
 
 os.setalias('du', du_cmd)
 
