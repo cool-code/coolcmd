@@ -397,21 +397,21 @@ os.setalias('pkill',
     '@echo off $T set "_N_=" $T for %A in ($*) do set "_N_=%A" $T if defined _N_ taskkill /f /im %_N_%* $T set "_N_=" $T echo on')
 
 
+-- 初始化 powershell 环境
 local ps_command_header = 'powershell -NoLogo -NoProfile -command "' ..
-    -- 初始化环境
-    "$crs='\27[0m';" ..                                                               --重置颜色
-    "$cl='196;208;220;40;39;33;135;242;250;253'.Split(';')|%{'\27[38;5;'+$_+'m'};" .. -- 彩虹色，灰，银，白
+    --重置颜色
+    "$crs='\27[0m';" ..
+    -- 彩虹色，灰，银，白
+    "$cl='196;208;220;40;39;33;135;242;250;253'.Split(';')|%{'\27[38;5;'+$_+'m'};" ..
     -- 定义 Write-Host 的别名 wh，简化后续输出
     "sal wh Write-Host;"
 
-local ps_format_size = 'powershell -NoLogo -NoProfile -command "' ..
-
-    -- 格式化函数
-    -- 数字转换为带颜色的字符串，单位自动转换为 B/KB/MB/GB/TB/PB/EB，并且根据使用的单位显示对应的颜色。
-    -- 返回带颜色的 7 位数字 + 空格 + 单位
-    -- 整体占 10 字符宽度，数字和单位都是右对齐（不足左侧补空格）
-    -- 如果值为 0 或负数，直接返回 "      0  B"（6 个空格 + 1 个数字 + 2 个空格 + 1 个单位），并使用灰色显示
-    "$ul=' B;KB;MB;GB;TB;PB;EB'.Split(';');" .. -- 单位
+-- 格式化函数
+-- 数字转换为带颜色的字符串，单位自动转换为 B/KB/MB/GB/TB/PB/EB，并且根据使用的单位显示对应的颜色。
+-- 返回带颜色的 7 位数字 + 空格 + 单位
+-- 整体占 10 字符宽度，数字和单位都是右对齐（不足左侧补空格）
+-- 如果值为 0 或负数，直接返回 "      0  B"（6 个空格 + 1 个数字 + 2 个空格 + 1 个单位），并使用灰色显示
+local ps_format_size = "$ul=' B;KB;MB;GB;TB;PB;EB'.Split(';');" .. -- 单位
     "$v_ff={param($v,$vc);" ..
     "if($v -le 0){" ..
     "return($cl[7]+'      0  B'+$crs)" ..
