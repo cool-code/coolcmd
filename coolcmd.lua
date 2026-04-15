@@ -544,12 +544,12 @@ local du_cmd = ps_command_header .. ps_format_size ..
     "if($d-eq 0){" ..
     "$x=[IO.Path]::GetExtension($v);$z=[IO.Path]::GetFileNameWithoutExtension($v);" ..
     -- 如果扩展名比限制还宽，直接整体截断文件名，否则保留扩展名并递归截断主文件名
-    "$wl=$m-$x.Length; if($wl-lt 4){return (&$v_ft $v $m 2)}" ..
+    "$wl=$m-$x.Length; if($wl-lt 3){return (&$v_ft $v $m 3)}" ..
     -- 递归调用自己来截断主文件名，最后拼回点号和扩展名
     "return (&$v_ft $z $wl 2)+$x" ..
     "}" ..
     -- 5. 执行截断逻辑：从头累加视觉宽度，直到逼近限制 $n
-    "$n=$m-2;if($d-eq 1){$n=$m-3}" ..
+    "$n=$m-2;if($d-eq 1){$n=$m-3}elseif($d-eq 2){$n=$m-1}" ..
     "$r='';$s=0;for($j=0;$j-lt $a.Count;$j++){" ..
     "if($s+$w[$j]-gt $n){break}$r+=$a[$j];$s+=$w[$j]" ..
     "}" ..
@@ -558,9 +558,8 @@ local du_cmd = ps_command_header .. ps_format_size ..
     "return $r+('.'*($m-$s))" ..
     "};" ..
     -- LS_COLORS & LS_ICONS 渲染
-    "$vlc=@{}; $vli=@{};" ..
-    "$env:LS_COLORS -split ':'|%{$kv=$_.Split('=');if($kv.Count -eq 2){$vlc[$kv[0]]='\27['+$kv[1]+'m'}};" ..
-    "$env:LS_ICONS -split ':'|%{$kv=$_.Split('=');if($kv.Count -eq 2){$vli[$kv[0]]=$kv[1]}};" ..
+    "$vlc=@{};$env:LS_COLORS-split':'|%{$k,$v=$_-split'=';if($v){$vlc[$k]='\27['+$v+'m'}};" ..
+    "$vli=@{};$env:LS_ICONS-split':'|%{$k,$v=$_-split'=';if($v){$vli[$k]=$v}};" ..
     "$v_fc={param($v_cn,$v_xt,$v_is_d);" ..
     "$vc=$cl[8];$vi=' ';" ..
     "if($v_is_d -eq 1){" ..
