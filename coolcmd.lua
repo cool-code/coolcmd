@@ -399,9 +399,8 @@ os.setalias('pkill',
 
 local ps_command_header = 'powershell -NoLogo -NoProfile -command "' ..
     -- 初始化环境
-    "$v_rs='\27[0m';" ..                                                                                 --重置颜色
-    "$v_u=' B;KB;MB;GB;TB;PB;EB'.Split(';');" ..                                                             -- 单位
-    "$v_c='196;208;220;40;39;33;135;242;250;253'.Split(';')|ForEach-Object{'\27[38;5;'+$_+'m'};" .. -- 彩虹色，灰，银，白
+    "$crs='\27[0m';" ..                                                                           --重置颜色
+    "$cl='196;208;220;40;39;33;135;242;250;253'.Split(';')|%{'\27[38;5;'+$_+'m'};" .. -- 彩虹色，灰，银，白
     -- 定义 Write-Host 的别名 wh，简化后续输出
     "sal wh Write-Host;" ..
     -- 格式化函数
@@ -409,29 +408,30 @@ local ps_command_header = 'powershell -NoLogo -NoProfile -command "' ..
     -- 返回带颜色的 7 位数字 + 空格 + 单位
     -- 整体占 10 字符宽度，数字和单位都是右对齐（不足左侧补空格）
     -- 如果值为 0 或负数，直接返回 "      0  B"（6 个空格 + 1 个数字 + 2 个空格 + 1 个单位），并使用灰色显示
-    "$v_ff={param($vv,$vc);" ..
-    "if($vv -le 0){" ..
-    "return($v_c[7]+'      0  B'+$v_rs)" ..
+    "$ul=' B;KB;MB;GB;TB;PB;EB'.Split(';');" .. -- 单位
+    "$v_ff={param($v,$vc);" ..
+    "if($v -le 0){" ..
+    "return($cl[7]+'      0  B'+$crs)" ..
     "};" ..
-    "$vi=0;" ..
-    "$vn=[double]$vv;" ..
-    "while($vn -ge 1024 -and $vi -lt 6){" ..
+    "$i=0;" ..
+    "$vn=[double]$v;" ..
+    "while($vn -ge 1024 -and $i -lt 6){" ..
     "$vn/=1024;" ..
-    "$vi++" ..
+    "$i++" ..
     "};" ..
-    "$vdn=('{0:N2}' -f $vn).PadLeft(7);" ..
-    "$vun=$v_u[$vi];" ..
-    "$vuc=$v_c[$vi];" ..
-    "return ($vc+$vdn+' '+$vuc+$vun)" ..
-    "}; "
+    "$n=('{0:N2}' -f $vn).PadLeft(7);" ..
+    "$u=$ul[$i];" ..
+    "$uc=$cl[$i];" ..
+    "return ($vc+$n+' '+$uc+$u+$crs)" ..
+    "};"
 
 -- PadCenter 函数：将文本居中并根据指定宽度进行左右补齐
 local ps_pad_center = "$v_pcf={param($vt,$vw);" ..
-    "if($vt.Length -ge $vw){ return $vt };" ..
-    "$vp=$vw - $vt.Length;" ..
+    "if($vt.Length -ge $vw){return $vt};" ..
+    "$vp=$vw-$vt.Length;" ..
     "$vpl=[math]::Floor($vp/2);" ..
     "$vpr=[math]::Ceiling($vp/2);" ..
-    "return (' ' * $vpl) + $vt + (' ' * $vpr)" ..
+    "return (' '*$vpl)+$vt+(' '*$vpr)" ..
     "};"
 
 -- free: 显示内存使用情况，这个是彩色增强版。
@@ -447,25 +447,25 @@ local free_cmd = ps_command_header .. ps_pad_center ..
     "$v_av=$v_fm+$v_std;" ..
     "$v_sh=[double]$v_mem.WriteCacheMessagesPerSec*1024;" ..
     "$v_us=$v_tm-$v_av;" ..
-    "$v_stt=([double]($v_pg | Measure-Object -Property AllocatedBaseSize -Sum).Sum)*1024*1024;" ..
-    "$v_stu=([double]($v_pg | Measure-Object -Property CurrentUsage -Sum).Sum)*1024*1024;" ..
+    "$v_stt=([double]($v_pg|measure -Prop AllocatedBaseSize -Sum).Sum)*1024*1024;" ..
+    "$v_stu=([double]($v_pg|measure -Prop CurrentUsage -Sum).Sum)*1024*1024;" ..
     "$v_ctt=[double]$v_os.TotalVirtualMemorySize*1024;" ..
     "$v_ctu=$v_ctt-([double]$v_os.FreeVirtualMemory*1024);" ..
     -- 输出彩虹表头
-    "$v_h1=$v_c[0]+'  Type   ';" ..
-    "$v_h2=$v_c[1]+'   Total   ';" ..
-    "$v_h3=$v_c[2]+'   Used    ';" ..
-    "$v_h4=$v_c[3]+'   Free    ';" ..
-    "$v_h5=$v_c[4]+'  Shared   ';" ..
-    "$v_h6=$v_c[5]+'Buff/Cache ';" ..
-    "$v_h7=$v_c[6]+' Available' + $v_rs;" ..
-    "wh ($v_h1+$v_h2+$v_h3+$v_h4+$v_h5+$v_h6+$v_h7);" ..
+    "$h1=$cl[0]+'  Type   ';" ..
+    "$h2=$cl[1]+'   Total   ';" ..
+    "$h3=$cl[2]+'   Used    ';" ..
+    "$h4=$cl[3]+'   Free    ';" ..
+    "$h5=$cl[4]+'  Shared   ';" ..
+    "$h6=$cl[5]+'Buff/Cache ';" ..
+    "$h7=$cl[6]+' Available' + $crs;" ..
+    "wh ($h1+$h2+$h3+$h4+$h5+$h6+$h7);" ..
     -- 输出横线 (避开 * 运算符引发的报错)
-    "wh ($v_c[7]+'-------- ---------- ---------- ---------- ---------- ---------- ----------'+$v_rs);" ..
+    "wh ($cl[7]+'-------- ---------- ---------- ---------- ---------- ---------- ----------'+$crs);" ..
     -- 输出彩色行
-    "wh ($v_c[0]+(&$v_pcf 'Mem' 8)+' '+(&$v_ff $v_tm $v_c[1])+' '+(&$v_ff $v_us $v_c[2])+' '+(&$v_ff $v_fm $v_c[3])+' '+(&$v_ff $v_sh $v_c[4])+' '+(&$v_ff $v_ca $v_c[5])+' '+(&$v_ff $v_av $v_c[6]));" ..
-    "wh ($v_c[0]+(&$v_pcf 'Swap' 8)+' '+(&$v_ff $v_stt $v_c[1])+' '+(&$v_ff $v_stu $v_c[2])+' '+(&$v_ff ($v_stt-$v_stu) $v_c[3]));" ..
-    "wh ($v_c[0]+(&$v_pcf 'Commit' 8)+' '+(&$v_ff $v_ctt $v_c[1])+' '+(&$v_ff $v_ctu $v_c[2])+' '+(&$v_ff ($v_ctt-$v_ctu) $v_c[3]));" ..
+    "wh ($cl[0]+(&$v_pcf 'Mem' 8)+' '+(&$v_ff $v_tm $cl[1])+' '+(&$v_ff $v_us $cl[2])+' '+(&$v_ff $v_fm $cl[3])+' '+(&$v_ff $v_sh $cl[4])+' '+(&$v_ff $v_ca $cl[5])+' '+(&$v_ff $v_av $cl[6]));" ..
+    "wh ($cl[0]+(&$v_pcf 'Swap' 8)+' '+(&$v_ff $v_stt $cl[1])+' '+(&$v_ff $v_stu $cl[2])+' '+(&$v_ff ($v_stt-$v_stu) $cl[3]));" ..
+    "wh ($cl[0]+(&$v_pcf 'Commit' 8)+' '+(&$v_ff $v_ctt $cl[1])+' '+(&$v_ff $v_ctu $cl[2])+' '+(&$v_ff ($v_ctt-$v_ctu) $cl[3]));" ..
     '"'
 
 os.setalias('free', free_cmd)
@@ -473,47 +473,47 @@ os.setalias('free', free_cmd)
 -- df: 显示磁盘空间使用情况，这个是彩色增强版。
 local df_cmd = ps_command_header .. ps_pad_center ..
     -- 输出彩虹表头
-    "$v_h1=$v_c[0]+'Drive ';" ..
-    "$v_h2=$v_c[1]+'   Size    ';" ..
-    "$v_h3=$v_c[2]+'   Used    ';" ..
-    "$v_h4=$v_c[3]+'   Avail   ';" ..
-    "$v_h5=$v_c[4]+'Use% ';" ..
-    "$v_h6=$v_c[5]+'FileSystem ';" ..
-    "$v_h7=$v_c[6]+'VolumeName';" ..
-    "wh ($v_h1+$v_h2+$v_h3+$v_h4+$v_h5+$v_h6+$v_h7+$v_rs);" ..
+    "$h1=$cl[0]+'Drive ';" ..
+    "$h2=$cl[1]+'   Size    ';" ..
+    "$h3=$cl[2]+'   Used    ';" ..
+    "$h4=$cl[3]+'   Avail   ';" ..
+    "$h5=$cl[4]+'Use% ';" ..
+    "$h6=$cl[5]+'FileSystem ';" ..
+    "$h7=$cl[6]+'VolumeName';" ..
+    "wh ($h1+$h2+$h3+$h4+$h5+$h6+$h7+$crs);" ..
     -- 分割线
-    "wh ($v_c[7]+'----- ---------- ---------- ---------- ---- ---------- ----------'+$v_rs); " ..
+    "wh ($cl[7]+'----- ---------- ---------- ---------- ---- ---------- ----------'+$crs); " ..
     -- 主循环
-    "Get-CimInstance -Class Win32_LogicalDisk | Sort-Object Name | ForEach-Object {" ..
+    "Get-CimInstance Win32_LogicalDisk|Sort-Object Name|%{" ..
     "$c=$_;" ..
     "if($c.DriveType -eq 4){" ..
     "$v_pn=if($c.ProviderName){$c.ProviderName.ToLower()}else{''};" ..
     -- 远程卷显示共享名称和协议类型，协议类型通过 ProviderName 的前缀判断（SMB、WebDAV、FTP、SFTP、SSHFS、NFS）
-    "$v_nm=if($c.VolumeName){if($v_pn){$v_c[6]+$c.VolumeName+' ('+$c.ProviderName+')'}else{$v_c[6]+$c.VolumeName+' (Remote Disk)'}}elseif($v_pn){$v_c[6]+$c.VolumeSerialNumber+' ('+$c.ProviderName+')'}else{$v_c[7]+$c.VolumeSerialNumber+' (Remote Disk)'};" ..
+    "$v_nm=if($c.VolumeName){if($v_pn){$cl[6]+$c.VolumeName+' ('+$c.ProviderName+')'}else{$cl[6]+$c.VolumeName+' ('+$c.Description+')'}}elseif($v_pn){$cl[6]+$c.VolumeSerialNumber+' ('+$c.ProviderName+')'}else{$cl[7]+$c.VolumeSerialNumber+' ('+$c.Description+')'};" ..
     "$v_fs=if($v_pn -like '\\\\*'){'SMB'}elseif($v_pn -like 'http*'){'WebDAV'}elseif($v_pn -like 'ftp*'){'FTP'}elseif($v_pn -like 'sftp*'){'SFTP'}elseif($v_pn -like 'sshfs*'){'SSHFS'}elseif($v_pn -like 'nfs*' -or $v_pn -like '/nfs/*'){'NFS'}else{'Net'};" ..
     -- 根据协议类型显示不同的颜色，Net、SMB、WebDAV、FTP、SFTP、SSHFS、NFS 分别对应 红、橙、黄、绿、青、蓝、紫 七种颜色
-    "$v_fsc=if($v_fs -eq 'SMB'){$v_c[1]}elseif($v_fs -eq 'WebDAV'){$v_c[2]}elseif($v_fs -eq 'FTP'){$v_c[3]}elseif($v_fs -eq 'SFTP'){$v_c[4]}elseif($v_fs -eq 'SSHFS'){$v_c[5]}elseif($v_fs -eq 'NFS'){$v_c[6]}else{$v_c[0]};" ..
+    "$v_fsc=if($v_fs -eq 'SMB'){$cl[1]}elseif($v_fs -eq 'WebDAV'){$cl[2]}elseif($v_fs -eq 'FTP'){$cl[3]}elseif($v_fs -eq 'SFTP'){$cl[4]}elseif($v_fs -eq 'SSHFS'){$cl[5]}elseif($v_fs -eq 'NFS'){$cl[6]}else{$cl[0]};" ..
     "}else{" ..
     -- 本地卷显示卷标和文件系统类型
-    "$v_nm=if($c.VolumeName){$v_c[6]+$c.VolumeName}else{$v_c[7]+$c.VolumeSerialNumber+' (Local Disk)'};" ..
+    "$v_nm=if($c.VolumeName){$cl[6]+$c.VolumeName}else{$cl[7]+$c.VolumeSerialNumber+' ('+$c.Description+')'};" ..
     "$v_fst=if($c.FileSystem){$c.FileSystem.ToLower()}else{''};" ..
     "$v_fs=$c.FileSystem;" ..
     -- 根据文件系统类型显示不同的颜色，HPFS‌、CDFS、UDF、NTFS、FAT/FAT32、exFAT、ReFS 分别对应 红、橙、黄、绿、青、蓝、紫 七种颜色，未知文件系统使用灰色
-    "$v_fsc=if($v_fst -eq 'hpfs'){$v_c[0]}elseif($v_fst -eq 'cdfs'){$v_c[1]}elseif($v_fst -eq 'udf'){$v_c[2]}elseif($v_fst -like 'ntfs*'){$v_c[3]}elseif($v_fst -like 'fat*'){$v_c[4]}elseif($v_fst -eq 'exfat'){$v_c[5]}elseif($v_fst -eq 'refs'){$v_c[6]}else{$v_b};" ..
+    "$v_fsc=if($v_fst -eq 'hpfs'){$cl[0]}elseif($v_fst -eq 'cdfs'){$cl[1]}elseif($v_fst -eq 'udf'){$cl[2]}elseif($v_fst -like 'ntfs*'){$cl[3]}elseif($v_fst -like 'fat*'){$cl[4]}elseif($v_fst -eq 'exfat'){$cl[5]}elseif($v_fst -eq 'refs'){$cl[6]}else{$v_b};" ..
     "};" ..
     "$v_mt=$c.Size; $v_mu=$c.Size-$c.FreeSpace; $v_mf=$c.FreeSpace;" ..
     "$v_up=if($v_mt -gt 0){$v_mu/$v_mt}else{0};" ..
     -- 使用红色表示使用率大于 90%，使用橙色表示使用率大于 70%，否则使用绿色
-    "$v_uc=if($v_up -gt 0.9){$v_c[0]}elseif($v_up -gt 0.7){$v_c[1]}else{$v_c[3]};" ..
+    "$v_uc=if($v_up -gt 0.9){$cl[0]}elseif($v_up -gt 0.7){$cl[1]}else{$cl[3]};" ..
     "$v_pct=([math]::Round($v_up*100)).ToString().PadLeft(3) + '%';" ..
     -- 物理补齐首列空格
-    "wh ($v_c[0] + (&$v_pcf $c.Name 5) + $v_rs + ' ') -NoNewline;" ..
-    "wh ((&$v_ff $v_mt $v_c[1]) + $v_rs + ' ') -NoNewline;" ..
-    "wh ((&$v_ff $v_mu $v_c[2]) + $v_rs + ' ') -NoNewline;" ..
-    "wh ((&$v_ff $v_mf $v_c[3]) + $v_rs + ' ') -NoNewline;" ..
-    "wh ($v_uc + $v_pct + $v_rs + ' ') -NoNewline;" ..
-    "wh ($v_fsc + (&$v_pcf $v_fs 10) + $v_rs + ' ') -NoNewline;" ..
-    "wh ($v_nm + $v_rs);" ..
+    "wh ($cl[0]+(&$v_pcf $c.Name 5)+$crs+' ') -NoNewline;" ..
+    "wh ((&$v_ff $v_mt $cl[1])+$crs+' ') -NoNewline;" ..
+    "wh ((&$v_ff $v_mu $cl[2])+$crs+' ') -NoNewline;" ..
+    "wh ((&$v_ff $v_mf $cl[3])+$crs+' ') -NoNewline;" ..
+    "wh ($v_uc+$v_pct+$crs+' ') -NoNewline;" ..
+    "wh ($v_fsc+(&$v_pcf $v_fs 10)+$crs+' ') -NoNewline;" ..
+    "wh ($v_nm+$crs);" ..
     '};"'
 
 os.setalias('df', df_cmd)
@@ -550,16 +550,16 @@ local du_cmd = ps_command_header ..
     "$env:LS_COLORS -split ':'|%{$kv=$_.Split('=');if($kv.Count -eq 2){$vlc[$kv[0]]='\27['+$kv[1]+'m'}};" ..
     "$env:LS_ICONS -split ':'|%{$kv=$_.Split('=');if($kv.Count -eq 2){$vli[$kv[0]]=$kv[1]}};" ..
     "$v_fc={param($v_cn,$v_is_d);" ..
-    "$vc=$v_c[8];$vi=' ';" ..
+    "$vc=$cl[8];$vi=' ';" ..
     "if($v_is_d -eq 1){" ..
-    "$vc=if($vlc['di']){$vlc['di']}else{$v_c[5]};" ..
+    "$vc=if($vlc['di']){$vlc['di']}else{$cl[5]};" ..
     "$vi=if($vli['di']){$vli['di']+' '}else{' '};" ..
     "}else{" ..
     "$vk='*'+[IO.Path]::GetExtension($v_cn).ToLower();" ..
     "$vc=if($vlc[$vk]){$vlc[$vk]}elseif($vlc['fi']){$vlc['fi']};" ..
     "$vi=if($vli[$vk]){$vli[$vk]+' '}elseif($vli['fi']){$vli['fi']+' '};" ..
     "};" ..
-    "return $vc+$vi+$v_cn+$v_rs" ..
+    "return $vc+$vi+$v_cn+$crs" ..
     "};" ..
     -- 控制台操作函数
     "$C=[Console];" ..
@@ -574,8 +574,8 @@ local du_cmd = ps_command_header ..
     "$v_z=(Get-CimInstance Win32_Volume|?{$_.Name -eq $v_rp}).BlockSize;" ..
     "if(!$v_z){$v_z=4096};" ..
     "$v_sS=0;$v_sA=0;$v_cl=' '*10;" ..
-    "wh ($v_c[1]+'   Size    '+$v_c[3]+' Allocated '+$v_c[5]+'   Name'+$v_rs);" ..
-    "wh ($v_c[7]+'---------- ---------- -----------------------'+$v_rs);" ..
+    "wh ($cl[1]+'   Size    '+$cl[3]+' Allocated '+$cl[5]+'   Name'+$crs);" ..
+    "wh ($cl[7]+'---------- ---------- -----------------------'+$crs);" ..
     "gci '$*' 2>$null|%{" ..
     "$vit=$_;if($vit.PSIsContainer){" ..
     "$v_cS=0;$v_cA=0;$v_ct=0;" ..
@@ -584,23 +584,23 @@ local du_cmd = ps_command_header ..
     "$v_ct++;if($v_ct % 500 -eq 0){" ..
     "$v_sn=(&$v_ft $vit.Name ((&$cw)-49) 1);" .. -- 使用 1 代替 $true
     "&$v_fcl;" ..
-    "wh ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[3])+' '+(&$v_fc $v_sn 1)+' [scan...]') -NoNewline;" ..
+    "wh ((&$v_ff $v_cS $cl[1])+' '+(&$v_ff $v_cA $cl[3])+' '+(&$v_fc $v_sn 1)+' [scan...]') -NoNewline;" ..
     "}" ..
     "};" ..
     "&$v_fcl;" ..
     "$v_sn=(&$v_ft $vit.Name ((&$cw)-40) 1);" .. -- 使用 1 代替 $true
-    "wh ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[3])+' '+(&$v_fc $v_sn 1));" ..
+    "wh ((&$v_ff $v_cS $cl[1])+' '+(&$v_ff $v_cA $cl[3])+' '+(&$v_fc $v_sn 1));" ..
     "}else{ " ..
     "$v_sn=(&$v_ft $vit.Name ((&$cw)-40) 0);" .. -- 使用 0 代替 $false
     "$v_cS=$vit.Length; $v_cA=[math]::Ceiling($vit.Length/$v_z)*$v_z;" ..
-    "wh ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[3])+' '+(&$v_fc $v_sn 0));" ..
+    "wh ((&$v_ff $v_cS $cl[1])+' '+(&$v_ff $v_cA $cl[3])+' '+(&$v_fc $v_sn 0));" ..
     "};" ..
     "$v_sS+=$v_cS;$v_sA+=$v_cA;" ..
     "};" ..
-    "wh ($v_c[7]+('-'*45)+$v_rs);" ..
-    "wh ($v_c[1]+'Total Size:      '+(&$v_ff $v_sS $v_c[1]));" ..
-    "wh ($v_c[3]+'Total Allocated: '+(&$v_ff $v_sA $v_c[3]));" ..
-    "wh ($v_c[7]+'(Based on '+($v_z/1KB)+'KB cluster size)'+$v_rs)" .. '"'
+    "wh ($cl[7]+('-'*45)+$crs);" ..
+    "wh ($cl[1]+'Total Size:      '+(&$v_ff $v_sS $cl[1]));" ..
+    "wh ($cl[3]+'Total Allocated: '+(&$v_ff $v_sA $cl[3]));" ..
+    "wh ($cl[7]+'(Based on '+($v_z/1KB)+'KB cluster size)'+$crs)" .. '"'
 
 os.setalias('du', du_cmd)
 
