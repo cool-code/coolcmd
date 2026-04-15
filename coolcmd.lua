@@ -526,27 +526,31 @@ os.setalias('df', df_cmd)
 local du_cmd = ps_command_header .. ps_format_size ..
     -- 智慧语义截断函数 (按视觉宽度截断，中文和 Emoji 友好，支持宽字符，组合表情不被截断，优先保留扩展名，末尾添加省略号)
     "$v_ft={param($v,$m,$d);" ..
-    "$p='^[\\x00-\\x7F]+$';" ..
+    -- 1. 初始化 Unicode 文本元素迭代器（处理组合字元如 Emoji）
     "$it=[Globalization.StringInfo]::GetTextElementEnumerator($v);" ..
-    "$a=@();while($it.MoveNext()){$x=$it.GetTextElement();if($a.Count){$n=([char[]]$a[-1])[-1];$vf=([char[]]$x)[0];if($n -eq [char]0x200D -or $vf -eq [char]0x200D){$a[-1]+=$x;continue}}$a+=$x}" ..
-    "$w=@();$ot=0;foreach($x in $a){if($x -match $p){$wt=$x.Length}else{$wt=2};$w+=$wt;$ot+=$wt}" ..
-    "if($ot -le $m){return $v}" ..
-    "if($d -ne 0){" ..
-    "for($n=3;$n -ge 1;$n--){" ..
-    "for($k=$a.Count;$k -ge 0;$k--){" ..
-    "$s=0;" ..
-    "for($i=0;$i -lt $k;$i++){$s+=$w[$i]}" ..
-    "if($k -lt $a.Count){$c=$s+$n}else{$c=$s}" ..
-    "if($c -eq $m){" ..
-    "$o='';" ..
-    "for($i=0;$i -lt $k;$i++){$o+=$a[$i]};" ..
-    "if($k -lt $a.Count){$o+='.'*$n};" ..
-    "return $o" ..
-    "}}}" ..
-    "$o='';$s=0;" ..
-    "for($i=0;$i -lt $a.Count;$i++){if($s+$w[$i] -gt $m){break};$o+=$a[$i];$s+=$w[$i]}return $o}" ..
-    "$xt=[IO.Path]::GetExtension($v);" ..
-    "return (&$v_ft ([IO.Path]::GetFileNameWithoutExtension($v)) ($m-($xt.Length)) 1)+$xt" ..
+    "$a=@();while($it.MoveNext()){" ..
+    "$x=$it.GetTextElement();" ..
+    -- 处理 ZWJ (0x200D) 连体逻辑：如果当前字元或前一个字元是连字元，则合并到上一个元素
+    "if($a.Count -and (([char[]]$a[-1])[-1]-eq 0x200D -or ([char[]]$x)-eq 0x200D)){$a[-1]+=$x}else{$a+=$x}" ..
+    "}" ..
+    -- 2. 计算视觉宽度数组 $w：CJK/全角/组合字元计为 2，ASCII 计为 1
+    "$w=$a|%{$u=1}{if($_-match'[\\u1100-\\u11ff\\u2e80-\\ua4cf\\uac00-\\ud7af\\uf900-\\ufaff\\ufe30-\\ufe4f\\uff00-\\uffee]' -or $_.Length-gt 1){$u=2};$u};" ..
+    -- 3. 检查总宽度 $o，若未超标则直接返回原字串
+    "$o=0;$w|%{$o+=$_};if($o-le $m){return $v}" ..
+    -- 4. 处理文件模式 (d=0)：保留扩展名
+    "if($d-eq 0){" ..
+    "$x=[IO.Path]::GetExtension($v);$z=[IO.Path]::GetFileNameWithoutExtension($v);" ..
+    -- 如果扩展名比限制还宽，直接整体截断文件名，否则保留扩展名并递归截断主文件名
+    "$wl=$m-$x.Length; if($wl-lt 4){return (&$v_ft $v $m 1)}" ..
+    -- 递归调用自己来截断主文件名，最后拼回点号和扩展名
+    "return (&$v_ft $z $wl 1)+$x" ..
+    "}" ..
+    -- 5. 执行截断逻辑：从头累加视觉宽度，直到逼近限制 $m
+    "$r='';$s=0;for($j=0;$j-lt $a.Count;$j++){" ..
+    "if($s+$w[$j]-gt $m-2){break}$r+=$a[$j];$s+=$w[$j]" ..
+    "}" ..
+    -- 6. 返回截断后的结果，并根据视觉剩余宽度精确补齐省略号（'.'）
+    "return $r+('.'*($m-$s))" ..
     "};" ..
     -- LS_COLORS & LS_ICONS 渲染
     "$vlc=@{}; $vli=@{};" ..
