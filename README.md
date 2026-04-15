@@ -24,31 +24,32 @@ curl -fsSL https://bit.ly/coolcmd -o cool.cmd && .\cool.cmd
 
 ## 🛠️ 包含工具与智慧映射
 
-| 工具         | 智慧映射（Alias）                  | 智慧降级(Fallback)          | 功能                               |
-| ------------ | ---------------------------------- | --------------------------- | ---------------------------------- |
-| LSD          | ls, ll, la, l1, lt, ld, lf ...     | dir (带 /OG 排序)           | 带图标和 24 位真彩色的文件列表     |
-| Bat          | cat                                | type                        | 带有语法高亮和 Git 状态的文本查看  |
-| Ripgrep (rg) | grep                               | findstr                     | 全球最快的文本搜索工具             |
-| Btop         | top                                | resmon                      | 炫酷的交互式系统资源监视器         |
-| Procs        | ps                                 | tasklist                    | 彩色的进程信息查看器               |
-| uutils       | rm, cp, mv, df, du                 | del, copy, move, powershell | GNU Coreutils 的 Rust 跨平台实现   |
-| PowerShell   | free, utime, df, du                | powershell                  | 跟 linux 命令一样的 Windows 实现   |
-| CMD          | clear, which, kill, pkill, killall | cls,where,taskkill          | 将 linux 命令映射为 Windows 命令上 |
-| Clink        | cool                               |                             | 热重载命令，修改配置后即刻生效     |
+| 工具         | 智慧映射（Alias）                  | 智慧降级(Fallback)   | 功能                               |
+| ------------ | ---------------------------------- | -------------------- | ---------------------------------- |
+| LSD          | ls, ll, la, l1, lt, ld, lf ...     | dir (带 /OG 排序)    | 带图标和 24 位真彩色的文件列表     |
+| Bat          | cat                                | type                 | 带有语法高亮和 Git 状态的文本查看  |
+| Ripgrep (rg) | grep                               | findstr              | 全球最快的文本搜索工具             |
+| Btop         | top                                | resmon               | 炫酷的交互式系统资源监视器         |
+| Procs        | ps                                 | tasklist             | 彩色的进程信息查看器               |
+| uutils       | rm, cp, mv                         | del, copy, move      | GNU Coreutils 的 Rust 跨平台实现   |
+| PowerShell   | free, utime, df, du                |                      | 跟 linux 命令一样的 Windows 实现   |
+| CMD          | clear, which, kill, pkill, killall | cls, where, taskkill | 将 linux 命令映射为 Windows 命令上 |
+| Clink        | cool                               |                      | 热重载命令，修改配置后即刻生效     |
 
 
 ## 🛠️ 自动化安装清单
 
 CoolCMD 的安装脚本 `cool.cmd` 会自动执行以下流程，确保环境一键就位：
 
-1. **核心引擎：** 安装 **Clink** (透过注册表动态侦测路径) 并设置为 CMD 自动注入。
+1. **核心引擎：** 安装 **Clink**，为 CMD 提供强大的命令补全功能。
 2. **Linux 工具链：**
-    1. **uutils coreutils**: 提供 `rm`, `cp`, `mv`, `df`, `du` 等核心命令。
+    1. **uutils coreutils**: 提供 `rm`, `cp`, `mv` 等核心命令。
     2. **LSD**: 替代 `ls`，提供图标与色彩支持。
     3. **Bat**: 替代 `cat`，提供语法高亮。
     4. **Ripgrep(rg)** : 提供极速文本搜索。
     5. **btop**: 现代化系统资源监视器。
     6. **Procs**: 进阶进程管理工具。
+    7. **PowerShell**: 实现了彩色增强版的 `free`、`uptime`、`df`、`du` 命令。
 3. **视觉与主题：**
     1. **Oh-My-Posh**: 安装主题引擎并自动部署 `jandedobbeleer` 经典配置。
     2. **Meslo Nerd Font**: 透过 **Oh-My-Posh** 自动下载并安装适配图标的专用字体。
@@ -61,6 +62,8 @@ CoolCMD 的安装脚本 `cool.cmd` 会自动执行以下流程，确保环境一
 - `coolcmd.lua`: 核心大脑，处理智慧路由与热重载逻辑。
 - `LS_COLORS`: 原始配色数据库。
 - `LS_COLORS_FULL_CACHE`:  **「自动生成」** 避免重复计算（如果原始 `LS_COLORS` 有手动更新，请删除该文件以同步更新）。
+- `LS_ICONS`: 原始图标数据库（du 命令使用）。
+- `LS_ICONS_FULL_CACHE`:  **「自动生成」** 避免重复计算（如果原始 `LS_ICONS` 有手动更新，请删除该文件以同步更新）。
 - `LANG_ENV.lua`: **「自动生成」** 存储侦测到的系统语言环境。如果想要设置为跟系统语言不同的环境语言，可以直接修改该配置文件。
 - `COOL_TOOLS_CACHE.lua`: **「自动生成」** 存储工具侦测结果，消除 `where` 查询延迟。如果不喜欢某个工具的实现（比如 du，df），想要使用回退实现，可以直接将文件中的工具从 true 改为 false。
 
@@ -79,7 +82,7 @@ CoolCMD 在设计上绕过了许多 CMD 的原生限制：
 - **静默安装**：使用了 `--source winget` 与 `autorun install -- -q`，尽量减少弹窗干扰。
 - **清理自毁**：脚本执行完毕后会启动一个后台进程自我删除 ` (del "%~f0")`，保持用户下载目录整洁。
 - **17ms 的秘密**：通过 `os.isfile` 和 `dofile` 预加载解析后的 `Lua` 缓存，避开了 `CMD` 频繁启动新进程的开销。
-- **Doskey 避坑**：针对 `uptime` 的实现，我们巧妙避开了 `$t`（CMD 命令分隔符）等保留关键字，确保转义稳定。
+- **Doskey 避坑**：针对 `uptime`、`free`、`du`、`df` 的实现，我们巧妙避开了 `$t`、`$g`、`$b`、`$e`、`$f`、`$q` 等保留关键字，确保转义稳定。
 
 ## 🙏 特别致谢
 
