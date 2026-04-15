@@ -1,0 +1,6 @@
+/test/
+/test/reports/
+/debug/
+/debug/logs/
+/.vscode
+.DS_Store

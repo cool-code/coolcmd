@@ -402,6 +402,8 @@ local ps_command_header = 'powershell -NoLogo -NoProfile -command "' ..
     "$v_rs='\27[0m';" ..                                                                                 --重置颜色
     "$v_u=' B;KB;MB;GB;TB;PB;EB'.Split(';');" ..                                                             -- 单位
     "$v_c='196;208;220;40;39;33;135;242;250;253'.Split(';')|ForEach-Object{'\27[38;5;'+$_+'m'};" .. -- 彩虹色，灰，银，白
+    -- 定义 Write-Host 的别名 wh，简化后续输出
+    "sal wh Write-Host;" ..
     -- 格式化函数
     -- 数字转换为带颜色的字符串，单位自动转换为 B/KB/MB/GB/TB/PB/EB，并且根据使用的单位显示对应的颜色。
     -- 返回带颜色的 7 位数字 + 空格 + 单位
@@ -457,13 +459,13 @@ local free_cmd = ps_command_header .. ps_pad_center ..
     "$v_h5=$v_c[4]+'  Shared   ';" ..
     "$v_h6=$v_c[5]+'Buff/Cache ';" ..
     "$v_h7=$v_c[6]+' Available' + $v_rs;" ..
-    "write-host ($v_h1+$v_h2+$v_h3+$v_h4+$v_h5+$v_h6+$v_h7);" ..
+    "wh ($v_h1+$v_h2+$v_h3+$v_h4+$v_h5+$v_h6+$v_h7);" ..
     -- 输出横线 (避开 * 运算符引发的报错)
-    "write-host ($v_c[7]+'-------- ---------- ---------- ---------- ---------- ---------- ----------'+$v_rs);" ..
+    "wh ($v_c[7]+'-------- ---------- ---------- ---------- ---------- ---------- ----------'+$v_rs);" ..
     -- 输出彩色行
-    "write-host ($v_c[0]+(&$v_pcf 'Mem' 8)+' '+(&$v_ff $v_tm $v_c[1])+' '+(&$v_ff $v_us $v_c[2])+' '+(&$v_ff $v_fm $v_c[3])+' '+(&$v_ff $v_sh $v_c[4])+' '+(&$v_ff $v_ca $v_c[5])+' '+(&$v_ff $v_av $v_c[6]));" ..
-    "write-host ($v_c[0]+(&$v_pcf 'Swap' 8)+' '+(&$v_ff $v_stt $v_c[1])+' '+(&$v_ff $v_stu $v_c[2])+' '+(&$v_ff ($v_stt-$v_stu) $v_c[3]));" ..
-    "write-host ($v_c[0]+(&$v_pcf 'Commit' 8)+' '+(&$v_ff $v_ctt $v_c[1])+' '+(&$v_ff $v_ctu $v_c[2])+' '+(&$v_ff ($v_ctt-$v_ctu) $v_c[3]));" ..
+    "wh ($v_c[0]+(&$v_pcf 'Mem' 8)+' '+(&$v_ff $v_tm $v_c[1])+' '+(&$v_ff $v_us $v_c[2])+' '+(&$v_ff $v_fm $v_c[3])+' '+(&$v_ff $v_sh $v_c[4])+' '+(&$v_ff $v_ca $v_c[5])+' '+(&$v_ff $v_av $v_c[6]));" ..
+    "wh ($v_c[0]+(&$v_pcf 'Swap' 8)+' '+(&$v_ff $v_stt $v_c[1])+' '+(&$v_ff $v_stu $v_c[2])+' '+(&$v_ff ($v_stt-$v_stu) $v_c[3]));" ..
+    "wh ($v_c[0]+(&$v_pcf 'Commit' 8)+' '+(&$v_ff $v_ctt $v_c[1])+' '+(&$v_ff $v_ctu $v_c[2])+' '+(&$v_ff ($v_ctt-$v_ctu) $v_c[3]));" ..
     '"'
 
 os.setalias('free', free_cmd)
@@ -478,9 +480,9 @@ local df_cmd = ps_command_header .. ps_pad_center ..
     "$v_h5=$v_c[4]+'Use% ';" ..
     "$v_h6=$v_c[5]+'FileSystem ';" ..
     "$v_h7=$v_c[6]+'VolumeName';" ..
-    "write-host ($v_h1+$v_h2+$v_h3+$v_h4+$v_h5+$v_h6+$v_h7+$v_rs);" ..
+    "wh ($v_h1+$v_h2+$v_h3+$v_h4+$v_h5+$v_h6+$v_h7+$v_rs);" ..
     -- 分割线
-    "write-host ($v_c[7]+'----- ---------- ---------- ---------- ---- ---------- ----------'+$v_rs); " ..
+    "wh ($v_c[7]+'----- ---------- ---------- ---------- ---- ---------- ----------'+$v_rs); " ..
     -- 主循环
     "Get-CimInstance -Class Win32_LogicalDisk | Sort-Object Name | ForEach-Object {" ..
     "$c=$_;" ..
@@ -505,13 +507,13 @@ local df_cmd = ps_command_header .. ps_pad_center ..
     "$v_uc=if($v_up -gt 0.9){$v_c[0]}elseif($v_up -gt 0.7){$v_c[1]}else{$v_c[3]};" ..
     "$v_pct=([math]::Round($v_up*100)).ToString().PadLeft(3) + '%';" ..
     -- 物理补齐首列空格
-    "write-host ($v_c[0] + (&$v_pcf $c.Name 5) + $v_rs + ' ') -NoNewline;" ..
-    "write-host ((&$v_ff $v_mt $v_c[1]) + $v_rs + ' ') -NoNewline;" ..
-    "write-host ((&$v_ff $v_mu $v_c[2]) + $v_rs + ' ') -NoNewline;" ..
-    "write-host ((&$v_ff $v_mf $v_c[3]) + $v_rs + ' ') -NoNewline;" ..
-    "write-host ($v_uc + $v_pct + $v_rs + ' ') -NoNewline;" ..
-    "write-host ($v_fsc + (&$v_pcf $v_fs 10) + $v_rs + ' ') -NoNewline;" ..
-    "write-host ($v_nm + $v_rs);" ..
+    "wh ($v_c[0] + (&$v_pcf $c.Name 5) + $v_rs + ' ') -NoNewline;" ..
+    "wh ((&$v_ff $v_mt $v_c[1]) + $v_rs + ' ') -NoNewline;" ..
+    "wh ((&$v_ff $v_mu $v_c[2]) + $v_rs + ' ') -NoNewline;" ..
+    "wh ((&$v_ff $v_mf $v_c[3]) + $v_rs + ' ') -NoNewline;" ..
+    "wh ($v_uc + $v_pct + $v_rs + ' ') -NoNewline;" ..
+    "wh ($v_fsc + (&$v_pcf $v_fs 10) + $v_rs + ' ') -NoNewline;" ..
+    "wh ($v_nm + $v_rs);" ..
     '};"'
 
 os.setalias('df', df_cmd)
@@ -559,8 +561,8 @@ local du_cmd = ps_command_header ..
     "};" ..
     "return $vc+$vi+$v_cn+$v_rs" ..
     "};" ..
+    -- 控制台操作函数
     "$C=[Console];" ..
-    "sal wh Write-Host;" ..
     "$cw={$C::WindowWidth};" ..
     "$v_fcl={" ..
     "$C::CursorLeft=0;" ..
@@ -572,7 +574,7 @@ local du_cmd = ps_command_header ..
     "$v_z=(Get-CimInstance Win32_Volume|?{$_.Name -eq $v_rp}).BlockSize;" ..
     "if(!$v_z){$v_z=4096};" ..
     "$v_sS=0;$v_sA=0;$v_cl=' '*10;" ..
-    "wh ($v_c[1]+'   Size    '+$v_c[4]+' Allocated '+$v_c[5]+'   Name'+$v_rs);" ..
+    "wh ($v_c[1]+'   Size    '+$v_c[3]+' Allocated '+$v_c[5]+'   Name'+$v_rs);" ..
     "wh ($v_c[7]+'---------- ---------- -----------------------'+$v_rs);" ..
     "gci '$*' 2>$null|%{" ..
     "$vit=$_;if($vit.PSIsContainer){" ..
@@ -582,22 +584,22 @@ local du_cmd = ps_command_header ..
     "$v_ct++;if($v_ct % 500 -eq 0){" ..
     "$v_sn=(&$v_ft $vit.Name ((&$cw)-49) 1);" .. -- 使用 1 代替 $true
     "&$v_fcl;" ..
-    "wh ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[4])+' '+(&$v_fc $v_sn 1)+' [scan...]') -NoNewline;" ..
+    "wh ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[3])+' '+(&$v_fc $v_sn 1)+' [scan...]') -NoNewline;" ..
     "}" ..
     "};" ..
     "&$v_fcl;" ..
     "$v_sn=(&$v_ft $vit.Name ((&$cw)-40) 1);" .. -- 使用 1 代替 $true
-    "wh ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[4])+' '+(&$v_fc $v_sn 1));" ..
+    "wh ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[3])+' '+(&$v_fc $v_sn 1));" ..
     "}else{ " ..
     "$v_sn=(&$v_ft $vit.Name ((&$cw)-40) 0);" .. -- 使用 0 代替 $false
     "$v_cS=$vit.Length; $v_cA=[math]::Ceiling($vit.Length/$v_z)*$v_z;" ..
-    "wh ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[4])+' '+(&$v_fc $v_sn 0));" ..
+    "wh ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[3])+' '+(&$v_fc $v_sn 0));" ..
     "};" ..
     "$v_sS+=$v_cS;$v_sA+=$v_cA;" ..
     "};" ..
     "wh ($v_c[7]+('-'*45)+$v_rs);" ..
     "wh ($v_c[1]+'Total Size:      '+(&$v_ff $v_sS $v_c[1]));" ..
-    "wh ($v_c[4]+'Total Allocated: '+(&$v_ff $v_sA $v_c[4]));" ..
+    "wh ($v_c[3]+'Total Allocated: '+(&$v_ff $v_sA $v_c[3]));" ..
     "wh ($v_c[7]+'(Based on '+($v_z/1KB)+'KB cluster size)'+$v_rs)" .. '"'
 
 os.setalias('du', du_cmd)
