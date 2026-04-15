@@ -552,13 +552,13 @@ local du_cmd = ps_command_header .. ps_format_size ..
     "$vlc=@{}; $vli=@{};" ..
     "$env:LS_COLORS -split ':'|%{$kv=$_.Split('=');if($kv.Count -eq 2){$vlc[$kv[0]]='\27['+$kv[1]+'m'}};" ..
     "$env:LS_ICONS -split ':'|%{$kv=$_.Split('=');if($kv.Count -eq 2){$vli[$kv[0]]=$kv[1]}};" ..
-    "$v_fc={param($v_cn,$v_is_d);" ..
+    "$v_fc={param($v_cn,$v_xt,$v_is_d);" ..
     "$vc=$cl[8];$vi=' ';" ..
     "if($v_is_d -eq 1){" ..
     "$vc=if($vlc['di']){$vlc['di']}else{$cl[5]};" ..
     "$vi=if($vli['di']){$vli['di']+' '}else{' '};" ..
     "}else{" ..
-    "$vk='*'+[IO.Path]::GetExtension($v_cn).ToLower();" ..
+    "$vk='*'+$v_xt.ToLower();" ..
     "$vc=if($vlc[$vk]){$vlc[$vk]}elseif($vlc['fi']){$vlc['fi']};" ..
     "$vi=if($vli[$vk]){$vli[$vk]+' '}elseif($vli['fi']){$vli['fi']+' '};" ..
     "};" ..
@@ -580,23 +580,25 @@ local du_cmd = ps_command_header .. ps_format_size ..
     "wh ($cl[1]+'   Size    '+$cl[3]+' Allocated '+$cl[5]+'   Name'+$crs);" ..
     "wh ($cl[7]+'---------- ---------- -----------------------'+$crs);" ..
     "gci '$*' 2>$null|%{" ..
-    "$vit=$_;if($vit.PSIsContainer){" ..
+    "$vit=$_;" ..
+    "$v_xt=[IO.Path]::GetExtension($vit.Name);" ..
+    "if($vit.PSIsContainer){" ..
     "$v_cS=0;$v_cA=0;$v_ct=0;" ..
     "gci $vit.FullName -r -File -ea 0|%{" ..
     "$v_l=$_.Length;$v_cS+=$v_l;$v_cA+=[math]::Ceiling($v_l/$v_z)*$v_z;" ..
     "$v_ct++;if($v_ct % 500 -eq 0){" ..
     "$v_sn=(&$v_ft $vit.Name ((&$cw)-49) 1);" .. -- 使用 1 代替 $true
     "&$v_fcl;" ..
-    "wh ((&$v_ff $v_cS $cl[1])+' '+(&$v_ff $v_cA $cl[3])+' '+(&$v_fc $v_sn 1)+' [scan...]') -NoNewline;" ..
+    "wh ((&$v_ff $v_cS $cl[1])+' '+(&$v_ff $v_cA $cl[3])+' '+(&$v_fc $v_sn $v_xt 1)+' [scan...]') -NoNewline;" ..
     "}" ..
     "};" ..
     "&$v_fcl;" ..
     "$v_sn=(&$v_ft $vit.Name ((&$cw)-40) 1);" .. -- 使用 1 代替 $true
-    "wh ((&$v_ff $v_cS $cl[1])+' '+(&$v_ff $v_cA $cl[3])+' '+(&$v_fc $v_sn 1));" ..
+    "wh ((&$v_ff $v_cS $cl[1])+' '+(&$v_ff $v_cA $cl[3])+' '+(&$v_fc $v_sn $v_xt 1));" ..
     "}else{ " ..
     "$v_sn=(&$v_ft $vit.Name ((&$cw)-40) 0);" .. -- 使用 0 代替 $false
     "$v_cS=$vit.Length; $v_cA=[math]::Ceiling($vit.Length/$v_z)*$v_z;" ..
-    "wh ((&$v_ff $v_cS $cl[1])+' '+(&$v_ff $v_cA $cl[3])+' '+(&$v_fc $v_sn 0));" ..
+    "wh ((&$v_ff $v_cS $cl[1])+' '+(&$v_ff $v_cA $cl[3])+' '+(&$v_fc $v_sn $v_xt 0));" ..
     "};" ..
     "$v_sS+=$v_cS;$v_sA+=$v_cA;" ..
     "};" ..
