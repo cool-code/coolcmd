@@ -536,20 +536,25 @@ local du_cmd = ps_command_header .. ps_format_size ..
     -- 2. 计算视觉宽度数组 $w：CJK/全角/组合字元计为 2，ASCII 计为 1
     "$w=$a|%{$u=1}{if($_-match'[\\u1100-\\u11ff\\u2e80-\\ua4cf\\uac00-\\ud7af\\uf900-\\ufaff\\ufe30-\\ufe4f\\uff00-\\uffee]' -or $_.Length-gt 1){$u=2};$u};" ..
     -- 3. 检查总宽度 $o，若未超标则直接返回原字串
-    "$o=0;$w|%{$o+=$_};if($o-le $m){return $v}" ..
+    "$o=0;$w|%{$o+=$_};" ..
+    -- 目录模式 (d=1) 的特殊处理：末尾保留一个字符宽度给斜杠，如果超标则截断并在末尾添加斜杠
+    "if($d-eq 1){$o+=1}" ..
+    "if($o-le $m){if($d-eq 1){$v+='\\'};return $v}" ..
     -- 4. 处理文件模式 (d=0)：保留扩展名
     "if($d-eq 0){" ..
     "$x=[IO.Path]::GetExtension($v);$z=[IO.Path]::GetFileNameWithoutExtension($v);" ..
     -- 如果扩展名比限制还宽，直接整体截断文件名，否则保留扩展名并递归截断主文件名
-    "$wl=$m-$x.Length; if($wl-lt 4){return (&$v_ft $v $m 1)}" ..
+    "$wl=$m-$x.Length; if($wl-lt 4){return (&$v_ft $v $m 2)}" ..
     -- 递归调用自己来截断主文件名，最后拼回点号和扩展名
-    "return (&$v_ft $z $wl 1)+$x" ..
+    "return (&$v_ft $z $wl 2)+$x" ..
     "}" ..
-    -- 5. 执行截断逻辑：从头累加视觉宽度，直到逼近限制 $m
+    -- 5. 执行截断逻辑：从头累加视觉宽度，直到逼近限制 $n
+    "$n=$m-2;if($d-eq 1){$n=$m-3}" ..
     "$r='';$s=0;for($j=0;$j-lt $a.Count;$j++){" ..
-    "if($s+$w[$j]-gt $m-2){break}$r+=$a[$j];$s+=$w[$j]" ..
+    "if($s+$w[$j]-gt $n){break}$r+=$a[$j];$s+=$w[$j]" ..
     "}" ..
-    -- 6. 返回截断后的结果，并根据视觉剩余宽度精确补齐省略号（'.'）
+    -- 6. 返回截断后的结果，并根据视觉剩余宽度精确补齐省略号（'.'）,文件模式末尾加 '..'，目录模式末尾加 '../'
+    "if($d-eq 1){return $r+('.'*($m-$s-1))+'\\'}" ..
     "return $r+('.'*($m-$s))" ..
     "};" ..
     -- LS_COLORS & LS_ICONS 渲染
