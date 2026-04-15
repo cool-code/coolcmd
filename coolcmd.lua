@@ -399,10 +399,13 @@ os.setalias('pkill',
 
 local ps_command_header = 'powershell -NoLogo -NoProfile -command "' ..
     -- 初始化环境
-    "$crs='\27[0m';" ..                                                                           --重置颜色
+    "$crs='\27[0m';" ..                                                               --重置颜色
     "$cl='196;208;220;40;39;33;135;242;250;253'.Split(';')|%{'\27[38;5;'+$_+'m'};" .. -- 彩虹色，灰，银，白
     -- 定义 Write-Host 的别名 wh，简化后续输出
-    "sal wh Write-Host;" ..
+    "sal wh Write-Host;"
+
+local ps_format_size = 'powershell -NoLogo -NoProfile -command "' ..
+
     -- 格式化函数
     -- 数字转换为带颜色的字符串，单位自动转换为 B/KB/MB/GB/TB/PB/EB，并且根据使用的单位显示对应的颜色。
     -- 返回带颜色的 7 位数字 + 空格 + 单位
@@ -435,7 +438,7 @@ local ps_pad_center = "$v_pcf={param($vt,$vw);" ..
     "};"
 
 -- free: 显示内存使用情况，这个是彩色增强版。
-local free_cmd = ps_command_header .. ps_pad_center ..
+local free_cmd = ps_command_header .. ps_format_size .. ps_pad_center ..
     -- 获取数据
     "$v_os=Get-CimInstance Win32_OperatingSystem;" ..
     "$v_mem=Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory;" ..
@@ -471,7 +474,7 @@ local free_cmd = ps_command_header .. ps_pad_center ..
 os.setalias('free', free_cmd)
 
 -- df: 显示磁盘空间使用情况，这个是彩色增强版。
-local df_cmd = ps_command_header .. ps_pad_center ..
+local df_cmd = ps_command_header .. ps_format_size .. ps_pad_center ..
     -- 输出彩虹表头
     "$h1=$cl[0]+'Drive ';" ..
     "$h2=$cl[1]+'   Size    ';" ..
@@ -520,29 +523,29 @@ os.setalias('df', df_cmd)
 
 -- du: 统计目录或文件磁盘空间使用情况，这个是彩色增强版。
 -- Windows 没有直接等价的工具，使用 PowerShell 获取目录大小信息并格式化输出
-local du_cmd = ps_command_header ..
+local du_cmd = ps_command_header .. ps_format_size ..
     -- 智慧语义截断函数 (按视觉宽度截断，中文和 Emoji 友好，支持宽字符，组合表情不被截断，优先保留扩展名，末尾添加省略号)
     "$v_ft={param($v,$m,$d);" ..
-    "$p='^[\\x00-\\x7F]+$';"..
-    "$it=[Globalization.StringInfo]::GetTextElementEnumerator($v);"..
-    "$a=@();while($it.MoveNext()){$x=$it.GetTextElement();if($a.Count){$n=([char[]]$a[-1])[-1];$vf=([char[]]$x)[0];if($n -eq [char]0x200D -or $vf -eq [char]0x200D){$a[-1]+=$x;continue}}$a+=$x}"..
-    "$w=@();$ot=0;foreach($x in $a){if($x -match $p){$wt=$x.Length}else{$wt=2};$w+=$wt;$ot+=$wt}"..
-    "if($ot -le $m){return $v}"..
-    "if($d -ne 0){"..
-    "for($n=3;$n -ge 1;$n--){"..
-    "for($k=$a.Count;$k -ge 0;$k--){"..
-    "$s=0;"..
-    "for($i=0;$i -lt $k;$i++){$s+=$w[$i]}"..
-    "if($k -lt $a.Count){$c=$s+$n}else{$c=$s}"..
-    "if($c -eq $m){"..
-    "$o='';"..
-    "for($i=0;$i -lt $k;$i++){$o+=$a[$i]};"..
-    "if($k -lt $a.Count){$o+='.'*$n};"..
-    "return $o"..
-    "}}}"..
-    "$o='';$s=0;"..
-    "for($i=0;$i -lt $a.Count;$i++){if($s+$w[$i] -gt $m){break};$o+=$a[$i];$s+=$w[$i]}return $o}"..
-    "$xt=[IO.Path]::GetExtension($v);"..
+    "$p='^[\\x00-\\x7F]+$';" ..
+    "$it=[Globalization.StringInfo]::GetTextElementEnumerator($v);" ..
+    "$a=@();while($it.MoveNext()){$x=$it.GetTextElement();if($a.Count){$n=([char[]]$a[-1])[-1];$vf=([char[]]$x)[0];if($n -eq [char]0x200D -or $vf -eq [char]0x200D){$a[-1]+=$x;continue}}$a+=$x}" ..
+    "$w=@();$ot=0;foreach($x in $a){if($x -match $p){$wt=$x.Length}else{$wt=2};$w+=$wt;$ot+=$wt}" ..
+    "if($ot -le $m){return $v}" ..
+    "if($d -ne 0){" ..
+    "for($n=3;$n -ge 1;$n--){" ..
+    "for($k=$a.Count;$k -ge 0;$k--){" ..
+    "$s=0;" ..
+    "for($i=0;$i -lt $k;$i++){$s+=$w[$i]}" ..
+    "if($k -lt $a.Count){$c=$s+$n}else{$c=$s}" ..
+    "if($c -eq $m){" ..
+    "$o='';" ..
+    "for($i=0;$i -lt $k;$i++){$o+=$a[$i]};" ..
+    "if($k -lt $a.Count){$o+='.'*$n};" ..
+    "return $o" ..
+    "}}}" ..
+    "$o='';$s=0;" ..
+    "for($i=0;$i -lt $a.Count;$i++){if($s+$w[$i] -gt $m){break};$o+=$a[$i];$s+=$w[$i]}return $o}" ..
+    "$xt=[IO.Path]::GetExtension($v);" ..
     "return (&$v_ft ([IO.Path]::GetFileNameWithoutExtension($v)) ($m-($xt.Length)) 1)+$xt" ..
     "};" ..
     -- LS_COLORS & LS_ICONS 渲染
@@ -604,13 +607,15 @@ local du_cmd = ps_command_header ..
 
 os.setalias('du', du_cmd)
 
--- uptime: 显示系统已运行时间及开机时间
-os.setalias('uptime',
-    'powershell -NoLogo -NoProfile -Command "$o=Get-CimInstance Win32_OperatingSystem; ' ..
-    '$s=$o.LastBootUpTime; $u=(Get-Date)-$s; ' ..
-    'write-host \'Up time:    \' -NoNewline; \'{0} days, {1} hours, {2} minutes\' -f $u.Days, $u.Hours, $u.Minutes; ' ..
-    'write-host \'Boot time:  \' $s"'
-)
+-- uptime: 显示系统已运行时间及开机时间（彩色）
+local uptime_cmd = ps_command_header ..
+    "$o=Get-CimInstance Win32_OperatingSystem;" ..
+    "$s=$o.LastBootUpTime;" ..
+    "$u=(Get-Date)-$s;" ..
+    "wh ($cl[0]+'Up time:    '+$cl[1]+$u.Days+' days, '+$cl[2]+$u.Hours+' hours, '+$cl[3]+$u.Minutes+' minutes' + $cr);" ..
+    "wh ($cl[4]+'Boot time:  '+$cl[5]+$s.ToString('D')+' '+$cl[6]+$s.ToString('T')+$cr)" .. '"'
+
+os.setalias('uptime', uptime_cmd)
 
 if not command_exists("which") then
     os.setalias('which', 'where $*') -- 查找可执行文件位置
