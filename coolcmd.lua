@@ -519,33 +519,31 @@ os.setalias('df', df_cmd)
 -- du: 统计目录或文件磁盘空间使用情况，这个是彩色增强版。
 -- Windows 没有直接等价的工具，使用 PowerShell 获取目录大小信息并格式化输出
 local du_cmd = ps_command_header ..
-    -- 智慧语义截断函数 (保留后缀版，避开 $true/$false)
-    "$v_ft={param($v_s,$v_m,$v_is_d);" ..
-    "$v_enc=[System.Text.Encoding]::GetEncoding(0);" ..
-    "if($v_enc.GetByteCount($v_s) -le $v_m){return $v_s};" ..
-    "$v_res='';$v_cur=0;" ..
-    "if($v_is_d -eq 1){ " .. -- 使用 1 代替 $true
-    "foreach($v_ch in $v_s.ToCharArray()){" ..
-    "$v_st=if([int]$v_ch -gt 255){2}else{1};" ..
-    "if($v_cur+$v_st+3 -gt $v_m){return $v_res+'...'};" ..
-    "$v_res+=$v_ch;$v_cur+=$v_st" ..
+    -- 智慧语义截断函数 (按视觉宽度截断，中文和 Emoji 友好，支持宽字符，组合表情不被截断，优先保留扩展名，末尾添加省略号)
+    "$v_ft={param($v,$m,$d);" ..
+    "$p='^[\\x00-\\x7F]+$';"..
+    "$it=[Globalization.StringInfo]::GetTextElementEnumerator($v);"..
+    "$a=@();while($it.MoveNext()){$x=$it.GetTextElement();if($a.Count){$n=([char[]]$a[-1])[-1];$vf=([char[]]$x)[0];if($n -eq [char]0x200D -or $vf -eq [char]0x200D){$a[-1]+=$x;continue}}$a+=$x}"..
+    "$w=@();$ot=0;foreach($x in $a){if($x -match $p){$wt=$x.Length}else{$wt=2};$w+=$wt;$ot+=$wt}"..
+    "if($ot -le $m){return $v}"..
+    "if($d -ne 0){"..
+    "for($n=3;$n -ge 1;$n--){"..
+    "for($k=$a.Count;$k -ge 0;$k--){"..
+    "$s=0;"..
+    "for($i=0;$i -lt $k;$i++){$s+=$w[$i]}"..
+    "if($k -lt $a.Count){$c=$s+$n}else{$c=$s}"..
+    "if($c -eq $m){"..
+    "$o='';"..
+    "for($i=0;$i -lt $k;$i++){$o+=$a[$i]};"..
+    "if($k -lt $a.Count){$o+='.'*$n};"..
+    "return $o"..
+    "}}}"..
+    "$o='';$s=0;"..
+    "for($i=0;$i -lt $a.Count;$i++){if($s+$w[$i] -gt $m){break};$o+=$a[$i];$s+=$w[$i]}return $o}"..
+    "$xt=[IO.Path]::GetExtension($v);"..
+    "return (&$v_ft ([IO.Path]::GetFileNameWithoutExtension($v)) ($m-($xt.Length)) 1)+$xt" ..
     "};" ..
-    "return $v_res;" ..
-    "}else{" .. -- 文件采取 "主文件名...扩展名" 策略
-    "$v_ext=[System.IO.Path]::GetExtension($v_s);" ..
-    "$v_base=[System.IO.Path]::GetFileNameWithoutExtension($v_s);" ..
-    "$v_eLen=$v_enc.GetByteCount($v_ext);" ..
-    "$v_bMax=$v_m-$v_eLen-3;" ..
-    "if($v_bMax -lt 3){$v_bMax=3};" ..
-    "foreach($v_ch in $v_base.ToCharArray()){" ..
-    "$v_st=if([int]$v_ch -gt 255){2}else{1};" ..
-    "if($v_cur+$v_st -gt $v_bMax){return $v_res+'...'+$v_ext};" ..
-    "$v_res+=$v_ch;$v_cur+=$v_st" ..
-    "};" ..
-    "return $v_res+$v_ext;" ..
-    "}" ..
-    "};" ..
-    -- 3. LS_COLORS & 图标渲染
+    -- LS_COLORS & LS_ICONS 渲染
     "$vlc=@{}; $vli=@{};" ..
     "$env:LS_COLORS -split ':'|%{$kv=$_.Split('=');if($kv.Count -eq 2){$vlc[$kv[0]]='\27['+$kv[1]+'m'}};" ..
     "$env:LS_ICONS -split ':'|%{$kv=$_.Split('=');if($kv.Count -eq 2){$vli[$kv[0]]=$kv[1]}};" ..
@@ -569,14 +567,14 @@ local du_cmd = ps_command_header ..
     "wh (' '*((&$cw)-1)) -NoNewline;" ..
     "$C::CursorLeft=0;" ..
     "};" ..
-    -- 4. 侦测与主循环
+    -- 侦测与主循环
     "$v_rp=(Get-Item .).Root.Name;" ..
     "$v_z=(Get-CimInstance Win32_Volume|?{$_.Name -eq $v_rp}).BlockSize;" ..
     "if(!$v_z){$v_z=4096};" ..
     "$v_sS=0;$v_sA=0;$v_cl=' '*10;" ..
     "wh ($v_c[1]+'   Size    '+$v_c[4]+' Allocated '+$v_c[5]+'   Name'+$v_rs);" ..
     "wh ($v_c[7]+'---------- ---------- -----------------------'+$v_rs);" ..
-    "gci '.\\$*' 2>$null|%{" ..
+    "gci '$*' 2>$null|%{" ..
     "$vit=$_;if($vit.PSIsContainer){" ..
     "$v_cS=0;$v_cA=0;$v_ct=0;" ..
     "gci $vit.FullName -r -File -ea 0|%{" ..
