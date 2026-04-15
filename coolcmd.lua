@@ -399,10 +399,9 @@ os.setalias('pkill',
 
 local ps_command_header = 'powershell -NoLogo -NoProfile -command "' ..
     -- 初始化环境
-    "$v_esc=[char]27;" ..
-    "$v_rs=$v_esc+'[0m';" ..                                                                                 --重置颜色
+    "$v_rs='\27[0m';" ..                                                                                 --重置颜色
     "$v_u=' B;KB;MB;GB;TB;PB;EB'.Split(';');" ..                                                             -- 单位
-    "$v_c='196;208;220;40;39;33;135;242;250;253'.Split(';') | ForEach-Object { $v_esc+'[38;5;'+$_+'m' };" .. -- 彩虹色，灰，银，白
+    "$v_c='196;208;220;40;39;33;135;242;250;253'.Split(';')|ForEach-Object{'\27[38;5;'+$_+'m'};" .. -- 彩虹色，灰，银，白
     -- 格式化函数
     -- 数字转换为带颜色的字符串，单位自动转换为 B/KB/MB/GB/TB/PB/EB，并且根据使用的单位显示对应的颜色。
     -- 返回带颜色的 7 位数字 + 空格 + 单位
@@ -547,58 +546,61 @@ local du_cmd = ps_command_header ..
     "}" ..
     "};" ..
     -- 3. LS_COLORS & 图标渲染
-    "$v_lc=@{}; $v_li=@{};" ..
-    "$env:LS_COLORS -split ':'|ForEach-Object{$v_kv=$_.Split('=');if($v_kv.Length -eq 2){$v_lc[$v_kv[0]]=$v_esc+'['+$v_kv[1]+'m'}};" ..
-    "$env:LS_ICONS -split ':'|ForEach-Object{$v_kv=$_.Split('=');if($v_kv.Length -eq 2){$v_li[$v_kv[0]]=$v_kv[1]}};" ..
+    "$vlc=@{}; $vli=@{};" ..
+    "$env:LS_COLORS -split ':'|%{$kv=$_.Split('=');if($kv.Count -eq 2){$vlc[$kv[0]]='\27['+$kv[1]+'m'}};" ..
+    "$env:LS_ICONS -split ':'|%{$kv=$_.Split('=');if($kv.Count -eq 2){$vli[$kv[0]]=$kv[1]}};" ..
     "$v_fc={param($v_cn,$v_is_d);" ..
     "$vc=$v_c[8];$vi=' ';" ..
     "if($v_is_d -eq 1){" ..
-    "$vc=if($v_lc['di']){$v_lc['di']}else{$v_c[5]};" ..
-    "$vi=if($v_li['di']){$v_li['di']+' '}else{' '};" ..
+    "$vc=if($vlc['di']){$vlc['di']}else{$v_c[5]};" ..
+    "$vi=if($vli['di']){$vli['di']+' '}else{' '};" ..
     "}else{" ..
-    "$vk='*'+[System.IO.Path]::GetExtension($v_cn).ToLower();" ..
-    "$vc=if($v_lc[$vk]){$v_lc[$vk]}elseif($v_lc['fi']){$v_lc['fi']};" ..
-    "$vi=if($v_li[$vk]){$v_li[$vk]+' '}elseif($v_li['fi']){$v_li['fi']+' '};" ..
+    "$vk='*'+[IO.Path]::GetExtension($v_cn).ToLower();" ..
+    "$vc=if($vlc[$vk]){$vlc[$vk]}elseif($vlc['fi']){$vlc['fi']};" ..
+    "$vi=if($vli[$vk]){$vli[$vk]+' '}elseif($vli['fi']){$vli['fi']+' '};" ..
     "};" ..
     "return $vc+$vi+$v_cn+$v_rs" ..
     "};" ..
+    "$C=[Console];" ..
+    "sal wh Write-Host;" ..
+    "$cw={$C::WindowWidth};" ..
     "$v_fcl={" ..
-    "[Console]::CursorLeft=0;" ..
-    "write-host (' '*([Console]::WindowWidth-1)) -NoNewline;" ..
-    "[Console]::CursorLeft=0;" ..
+    "$C::CursorLeft=0;" ..
+    "wh (' '*((&$cw)-1)) -NoNewline;" ..
+    "$C::CursorLeft=0;" ..
     "};" ..
     -- 4. 侦测与主循环
     "$v_rp=(Get-Item .).Root.Name;" ..
-    "$v_z=(Get-CimInstance -ClassName Win32_Volume|Where-Object{$_.Name -eq $v_rp}).BlockSize;" ..
+    "$v_z=(Get-CimInstance Win32_Volume|?{$_.Name -eq $v_rp}).BlockSize;" ..
     "if(!$v_z){$v_z=4096};" ..
     "$v_sS=0;$v_sA=0;$v_cl=' '*10;" ..
-    "write-host ($v_c[1]+'   Size    '+$v_c[4]+' Allocated '+$v_c[5]+'   Name'+$v_rs);" ..
-    "write-host ($v_c[7]+'---------- ---------- -----------------------'+$v_rs);" ..
-    "Get-ChildItem -Path '.\\$*' 2>$null|ForEach-Object{" ..
-    "$v_it=$_;if($v_it.PSIsContainer){" ..
+    "wh ($v_c[1]+'   Size    '+$v_c[4]+' Allocated '+$v_c[5]+'   Name'+$v_rs);" ..
+    "wh ($v_c[7]+'---------- ---------- -----------------------'+$v_rs);" ..
+    "gci '.\\$*' 2>$null|%{" ..
+    "$vit=$_;if($vit.PSIsContainer){" ..
     "$v_cS=0;$v_cA=0;$v_ct=0;" ..
-    "Get-ChildItem $v_it.FullName -Recurse -File -ErrorAction SilentlyContinue|ForEach-Object{" ..
+    "gci $vit.FullName -r -File -ea 0|%{" ..
     "$v_l=$_.Length;$v_cS+=$v_l;$v_cA+=[math]::Ceiling($v_l/$v_z)*$v_z;" ..
     "$v_ct++;if($v_ct % 500 -eq 0){" ..
-    "$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth-49) 1);" .. -- 使用 1 代替 $true
+    "$v_sn=(&$v_ft $vit.Name ((&$cw)-49) 1);" .. -- 使用 1 代替 $true
     "&$v_fcl;" ..
-    "write-host ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[4])+' '+(&$v_fc $v_sn 1)+' [scan...]') -NoNewline;" ..
+    "wh ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[4])+' '+(&$v_fc $v_sn 1)+' [scan...]') -NoNewline;" ..
     "}" ..
     "};" ..
     "&$v_fcl;" ..
-    "$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth-40) 1);" .. -- 使用 1 代替 $true
-    "write-host ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[4])+' '+(&$v_fc $v_sn 1));" ..
+    "$v_sn=(&$v_ft $vit.Name ((&$cw)-40) 1);" .. -- 使用 1 代替 $true
+    "wh ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[4])+' '+(&$v_fc $v_sn 1));" ..
     "}else{ " ..
-    "$v_sn=(&$v_ft $v_it.Name ([Console]::WindowWidth-40) 0);" .. -- 使用 0 代替 $false
-    "$v_cS=$v_it.Length; $v_cA=[math]::Ceiling($v_it.Length/$v_z)*$v_z;" ..
-    "write-host ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[4])+' '+(&$v_fc $v_sn 0));" ..
+    "$v_sn=(&$v_ft $vit.Name ((&$cw)-40) 0);" .. -- 使用 0 代替 $false
+    "$v_cS=$vit.Length; $v_cA=[math]::Ceiling($vit.Length/$v_z)*$v_z;" ..
+    "wh ((&$v_ff $v_cS $v_c[1])+' '+(&$v_ff $v_cA $v_c[4])+' '+(&$v_fc $v_sn 0));" ..
     "};" ..
     "$v_sS+=$v_cS;$v_sA+=$v_cA;" ..
     "};" ..
-    "write-host ($v_c[7]+('-'*45)+$v_rs);" ..
-    "write-host ($v_c[1]+'Total Size:      '+(&$v_ff $v_sS $v_c[1]));" ..
-    "write-host ($v_c[4]+'Total Allocated: '+(&$v_ff $v_sA $v_c[4]));" ..
-    "write-host ($v_c[7]+'(Based on '+($v_z/1KB)+'KB cluster size)'+$v_rs)" .. '"'
+    "wh ($v_c[7]+('-'*45)+$v_rs);" ..
+    "wh ($v_c[1]+'Total Size:      '+(&$v_ff $v_sS $v_c[1]));" ..
+    "wh ($v_c[4]+'Total Allocated: '+(&$v_ff $v_sA $v_c[4]));" ..
+    "wh ($v_c[7]+'(Based on '+($v_z/1KB)+'KB cluster size)'+$v_rs)" .. '"'
 
 os.setalias('du', du_cmd)
 
